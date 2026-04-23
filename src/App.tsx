@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { ConfirmProvider } from './components/ConfirmProvider';
 import { ErrorBanner } from './components/ErrorBanner';
+import { NavHotkeys } from './components/NavHotkeys';
 import { NoticeBanner } from './components/NoticeBanner';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
@@ -49,6 +50,7 @@ export default function App() {
 
   return (
     <ConfirmProvider>
+      <NavHotkeys />
       <div className="flex h-screen overflow-hidden bg-bg text-text">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
