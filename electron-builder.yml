@@ -1,0 +1,19 @@
+appId: com.twitchbot.app
+productName: TwitchBot
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**
+  - dist-electron/**
+  - electron/db/**
+  - package.json
+asarUnpack:
+  - node_modules/better-sqlite3/**
+win:
+  target:
+    - nsis
+  artifactName: ${productName}-${version}-setup.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDir: true
