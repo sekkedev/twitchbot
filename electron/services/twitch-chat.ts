@@ -97,15 +97,18 @@ export async function connectBot(): Promise<void> {
     const msg = normalizeMessage(chan, tags, text);
     console.log(`[chat] <${msg.user.displayName}> ${msg.message}`);
     broadcast('twitch:chat-message', msg);
-    try {
-      streakOnChatMessage(msg);
-    } catch (err) {
-      console.error('[session] chat presence error:', err);
-    }
+    // EXP first: handleMessageExp upserts the users row. streakOnChatMessage
+    // writes to viewer_sessions which has a FK to users.twitch_id, so running
+    // it before the upsert loses a brand-new chatter's first message.
     try {
       handleMessageExp(msg);
     } catch (err) {
       console.error('[exp] message handler error:', err);
+    }
+    try {
+      streakOnChatMessage(msg);
+    } catch (err) {
+      console.error('[session] chat presence error:', err);
     }
     void handleChatMessage(msg).catch((err) =>
       console.error('[cmd] handleChatMessage error:', err),
