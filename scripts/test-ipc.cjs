@@ -226,6 +226,58 @@ async function main() {
     const activityDay = analytics.getActivity('day');
     assert(activityDay.range === 'day', 'day range works');
 
+    console.log('\n[presence ordering]');
+    // Regression guard for issue #3: streak.onChatMessage inserts into
+    // viewer_sessions which has a FK on users.twitch_id. handleMessageExp
+    // (via upsertUser) must run BEFORE streakOnChatMessage, otherwise a
+    // brand-new chatter's first message is silently dropped.
+    streak.onStreamOnline();
+    const regressionSessionId = streak.getCurrentSessionId();
+    assert(regressionSessionId !== null, 'regression session started');
+
+    const newChatterMsg = {
+      user: {
+        id: '9999',
+        login: 'newbie',
+        displayName: 'newbie',
+        color: null,
+        roles: { broadcaster: false, moderator: false, vip: false, subscriber: false },
+      },
+      message: 'hello!',
+      timestamp: new Date().toISOString(),
+      channel: 'testchan',
+    };
+
+    // Contract: without a prior users row the insert violates the FK.
+    assertThrows(
+      () => streak.onChatMessage(newChatterMsg),
+      'onChatMessage rejects when user row missing (contract for #3)',
+    );
+
+    // Simulate what handleMessageExp -> upsertUser does before presence now.
+    const presenceIso = new Date().toISOString();
+    db.prepare(
+      'INSERT INTO users (twitch_id, username, first_seen, last_seen) VALUES (?, ?, ?, ?)',
+    ).run('9999', 'newbie', presenceIso, presenceIso);
+
+    streak.onChatMessage(newChatterMsg);
+    const vsRow = db
+      .prepare(
+        'SELECT * FROM viewer_sessions WHERE session_id = ? AND twitch_user_id = ?',
+      )
+      .get(regressionSessionId, '9999');
+    assert(!!vsRow, 'viewer_sessions row created after upsert + onChatMessage');
+    assert(
+      vsRow && vsRow.minutes_watched === 0,
+      'viewer_sessions minutes_watched starts at 0',
+    );
+
+    streak.onStreamOffline();
+
+    // Clean up the synthetic user so downstream counts stay deterministic.
+    // ON DELETE CASCADE on viewer_sessions clears its presence row.
+    db.prepare('DELETE FROM users WHERE twitch_id = ?').run('9999');
+
     console.log('\n[sessions]');
     const history = streak.listSessionHistory(10);
     assert(history.length >= 1, 'session history has entries');
