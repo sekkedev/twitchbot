@@ -419,7 +419,7 @@ function CommandEditor({
         <div>
           <label className="mb-1 block text-xs text-text-muted">Permissions</label>
           <p className="mb-2 text-[11px] text-text-dim">
-            Set-based. Broadcaster is always allowed. Selecting "everyone" overrides the other roles.
+            Set-based. Broadcaster is always allowed. Selecting &ldquo;everyone&rdquo; overrides the other roles.
           </p>
           <div className="flex flex-wrap gap-1.5">
             {ALL_ROLES.map((role) => {
