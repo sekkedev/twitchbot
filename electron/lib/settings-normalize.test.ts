@@ -25,6 +25,27 @@ describe('normalizeSetting — boolean keys', () => {
   });
 });
 
+describe('normalizeSetting - moderation keys', () => {
+  it('stores moderation booleans as true/false strings', () => {
+    expect(normalizeSetting('mod_links_enabled', true)).toBe('true');
+    expect(normalizeSetting('mod_links_enabled', '1')).toBe('true');
+    expect(normalizeSetting('mod_links_enabled', false)).toBe('false');
+    expect(normalizeSetting('mod_links_enabled', '0')).toBe('false');
+  });
+
+  it('validates moderation numeric thresholds', () => {
+    expect(normalizeSetting('mod_caps_max_percent', 70)).toBe('70');
+    expect(() => normalizeSetting('mod_caps_max_percent', -1)).toThrow();
+    expect(() => normalizeSetting('mod_caps_max_percent', 1.5)).toThrow();
+  });
+
+  it('validates the first escalation action', () => {
+    expect(normalizeSetting('mod_escalation_1', 'delete')).toBe('delete');
+    expect(normalizeSetting('mod_escalation_1', 'warn')).toBe('warn');
+    expect(() => normalizeSetting('mod_escalation_1', 'timeout')).toThrow();
+  });
+});
+
 describe('normalizeSetting — integer keys', () => {
   const key = 'exp_per_message';
 

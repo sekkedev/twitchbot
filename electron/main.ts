@@ -10,6 +10,7 @@ import { registerDbHandlers } from './ipc/db';
 import { registerDevHandlers } from './ipc/dev';
 import { registerDiagnosticsHandlers } from './ipc/diagnostics';
 import { registerFeedHandlers } from './ipc/feed';
+import { registerModerationHandlers } from './ipc/moderation';
 import { registerSessionHandlers } from './ipc/sessions';
 import { registerSettingsHandlers } from './ipc/settings';
 import { registerTimerHandlers } from './ipc/timers';
@@ -117,6 +118,7 @@ app.whenReady().then(async () => {
   registerBotHandlers();
   registerCommandHandlers();
   registerTimerHandlers();
+  registerModerationHandlers();
   registerSessionHandlers();
   registerUserHandlers();
   registerAnalyticsHandlers();
