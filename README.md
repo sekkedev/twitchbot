@@ -1,8 +1,8 @@
 # TwitchBot
 
-**A local Twitch bot with a loyalty system — runs on your machine, owns no data but yours.**
+**A local Twitch bot with a loyalty system, recurring chat timers, automatic moderation, and an event-driven automation engine — runs on your machine, owns no data but yours.**
 
-Chat commands, EXP and levels, watch streaks, a live event feed, and a dashboard for the analytics nerd in you. No cloud. No accounts. No subscriptions. Just an app on your PC that talks to Twitch directly.
+Chat commands, EXP and levels, watch streaks, scheduled chat timers, automatic moderation with Helix-backed actions, an automation engine for follows/subs/raids, a live event feed, and a dashboard for the analytics nerd in you. No cloud. No accounts. No subscriptions. Just an app on your PC that talks to Twitch directly.
 
 ![Dashboard](docs/screenshots/01-dashboard.png)
 
@@ -11,9 +11,9 @@ Chat commands, EXP and levels, watch streaks, a live event feed, and a dashboard
 ## What it does
 
 - **Runs your bot.** Connects to your Twitch chat and responds to commands — custom ones you write plus 5 built-ins (`!rank`, `!leaderboard`, `!streak`, `!watchtime`, `!commands`).
-- **Sends recurring timers.** Schedule chat reminders that wait for both time and chat activity before posting.
-- **Moderates chat.** Optional filters catch links, caps, emote spam, repeated messages, and symbol spam, then escalate through Helix moderation actions.
-- **Automates events.** Trigger chat messages, sounds, Discord webhooks, timeouts, EXP bonuses, and delays from follows, subs, cheers, raids, and stream state.
+- **Sends recurring timers.** Schedule chat reminders that wait for both elapsed time and a configurable amount of chat activity before posting, so the bot stays quiet in an empty room.
+- **Moderates chat.** Optional filters for links, caps, emote spam, repeated messages, and symbol spam, with per-rule thresholds and a four-step escalation ladder. Actions go through Twitch's modern Helix endpoints, not deprecated IRC commands.
+- **Automates events.** A rules engine that fires actions — chat messages, sounds, Discord webhooks, timeouts, EXP bonuses, ordered delays — from follows, subs, gift subs, cheers, raids, and stream online/offline events. Optional condition filters and per-rule cooldowns.
 - **Tracks loyalty.** Every viewer who chats accrues EXP, levels up, and builds a watch streak across streams.
 - **Shows you what happened.** A live feed mirrors chat + every follow, sub, cheer, raid, and stream event as they happen. Historical data is charted on the Analytics page.
 - **Keeps your data yours.** Everything lives in a single SQLite file on your machine. You can export it at any time. Zero telemetry, zero third-party servers.
@@ -28,33 +28,57 @@ Custom responses with variables (`{user}`, `{level}`, `{watch_time}`, …), per-
 
 ### Timers
 
-Recurring chat messages with the same variable templates as commands. Each timer can require a minimum number of chat lines since it last fired, so the bot can stay quiet when chat is quiet.
+Recurring chat messages with the same variable templates as commands. Each timer has an interval (presets: 5/10/15/30/60 min plus custom) and an optional minimum number of chat lines that must occur since it last fired — so the bot waits for chatters before posting.
 
-### Moderation
-
-Configurable automatic moderation for links, caps, emotes, repeated messages, and symbol spam. Actions use Twitch Helix moderation endpoints, not deprecated IRC commands, with warning logs and permitted-user controls.
-
-### Automations
-
-Event triggers for follows, subscriptions, gift subs, cheers, raids, stream online, and stream offline. Add optional conditions, cooldowns, and ordered actions: chat messages, sounds, Discord webhook posts, user timeouts, bonus EXP, and short delays.
+![Timers](docs/screenshots/03-timers.png)
 
 ### Loyalty & leaderboard
 
 Sortable, searchable table of every tracked viewer. Click any user to see their profile, full event history, and admin controls (adjust EXP, reset stats).
 
-![Loyalty leaderboard](docs/screenshots/03-loyalty.png)
+![Loyalty leaderboard](docs/screenshots/04-loyalty.png)
+
+### Moderation
+
+Configurable automatic moderation for **links**, **caps**, **emote spam**, **repeated messages**, and **symbol/ASCII spam**. Each rule has its own thresholds. Actions use Twitch Helix endpoints (`DELETE /moderation/chat`, `POST /moderation/bans`) — not deprecated IRC commands — and the app warns you when the OAuth token is missing the moderation scopes (`moderator:manage:chat_messages`, `moderator:manage:banned_users`).
+
+The escalation ladder is configurable: 1st offense `delete`/`warn`, 2nd `timeout 10s`, 3rd `timeout 10m`, 4th `timeout 24h`. Subscribers and VIPs can be exempted globally; specific users can be permitted permanently. Every action is logged to a moderation log you can filter by rule, user, or date.
+
+![Moderation rules](docs/screenshots/05-moderation-rules.png)
+
+<details>
+<summary><strong>Logs and permitted users</strong></summary>
+
+![Moderation logs](docs/screenshots/06-moderation-logs.png)
+
+</details>
+
+### Automations
+
+Event-triggered actions with optional conditions, cooldowns, and a sequenced action list. Supported events: `follow`, `subscription`, `sub_gift`, `cheer`, `raid`, `stream_online`, `stream_offline`. Conditions are AND-joined and use simple operators (`equals`, `greater_than`, `contains`, …) against event payload fields like `viewer_count`, `bits`, `tier`, `is_gift`. Actions:
+
+- `send_chat_message` — with `{user}`, `{raid_viewers}`, etc. variables
+- `play_sound` — local files dropped in the in-app sounds directory
+- `send_discord_webhook` — references a named webhook stored in Settings, not a hardcoded URL
+- `timeout_user` — Helix-backed
+- `add_exp` — bonus EXP to the triggering user
+- `delay` — wait between subsequent actions, max 30s
+
+A **Test** button dry-runs an automation against a mock event payload and shows what would happen before you save.
+
+![Automations](docs/screenshots/07-automations.png)
 
 ### Analytics
 
 Messages over time, EXP awarded per day, top-used commands, and peak viewers across past streams. All four charts update live and support 24h / 7d / 30d ranges.
 
-![Analytics](docs/screenshots/04-analytics.png)
+![Analytics](docs/screenshots/08-analytics.png)
 
 ### Settings
 
-Every knob — EXP per event, level formula, streak rules, the level-up announcement template — is editable at runtime. Credentials live here too, encrypted on disk.
+Every knob — EXP per event, level formula, streak rules, the level-up announcement template, every moderation threshold, named Discord webhook URLs, registered sound files — is editable at runtime. Credentials live here too, encrypted on disk.
 
-![Settings](docs/screenshots/05-settings.png)
+![Settings](docs/screenshots/09-settings.png)
 
 ---
 
@@ -89,6 +113,12 @@ On first launch the app shows a credentials form. Paste the Client ID + Client S
 
 Click **Connect to Twitch**, authorize in the browser, then hit **Connect bot** on the top bar. The live feed starts populating immediately.
 
+If you plan to use the Moderation page, the OAuth flow asks for two extra scopes (`moderator:manage:chat_messages`, `moderator:manage:banned_users`). The Moderation page warns you in-app if any of those scopes are missing — disconnecting and reconnecting re-prompts.
+
+### 5. (Optional) Wire up Discord webhooks
+
+If you want automations that post to Discord on raids/follows/etc., open **Settings → Discord Webhooks**, add a named webhook URL (e.g. `default`, `raids`), and reference it by name in the automation's `send_discord_webhook` action.
+
 ---
 
 ## Configuration at a glance
@@ -111,8 +141,20 @@ Everything below is editable in-app from the Settings page. Changes apply live �
 | `global_cooldown_seconds` | 2 | Minimum time between any two command invocations. |
 | `level_base` / `level_exponent` | 100 / 1.5 | Level formula: `floor(base × level^exponent)` EXP to level up. |
 | `levelup_announcement` | `{user} just reached level {level}!` | Template. Can be disabled entirely. |
-| `mod_*` | varies | Moderation rule toggles, thresholds, exemptions, permit duration, and escalation timeouts. |
-| `discord_webhook_*` | empty | Named Discord webhook URLs used by Automations. |
+| `mod_links_enabled` | `false` | Master toggle for the link filter. |
+| `mod_links_whitelist` | empty | Comma-separated allow-listed domains. |
+| `mod_links_permit_seconds` | 60 | Duration of a manually granted `!permit`. |
+| `mod_links_subs_exempt` | `true` | Subscribers bypass the link filter. |
+| `mod_caps_enabled` / `mod_caps_min_length` / `mod_caps_max_percent` | off / 10 / 70 | Caps spam: only check messages ≥N chars, fail if uppercase ratio > N%. |
+| `mod_emote_enabled` / `mod_emote_max_count` | off / 10 | Block messages with more than N emotes. |
+| `mod_repeat_enabled` / `mod_repeat_max_count` / `mod_repeat_window_seconds` | off / 3 / 60 | Same message N times within N seconds → violation. |
+| `mod_symbols_enabled` / `mod_symbols_min_length` / `mod_symbols_max_percent` | off / 10 / 50 | ASCII/symbol spam: same shape as caps but for non-alphanumerics. |
+| `mod_vips_exempt` | `false` | VIPs bypass moderation. (Mods + broadcaster always do.) |
+| `mod_escalation_1` | `delete` | First-offense action: `delete` or `warn`. |
+| `mod_escalation_2_timeout` | 10 | Second-offense timeout, seconds. |
+| `mod_escalation_3_timeout` | 600 | Third-offense timeout. |
+| `mod_escalation_4_timeout` | 86400 | Fourth-offense timeout (24h). |
+| `discord_webhook_*` | empty | Named Discord webhook URLs referenced by automations. Add/remove from Settings. |
 
 ---
 
@@ -123,13 +165,13 @@ Everything below is editable in-app from the Settings page. Changes apply live �
 
 ```powershell
 npm run typecheck          # strict TypeScript (main + renderer)
-npm test                   # Vitest unit tests
-npm run lint               # ESLint
-npm run test:ipc           # Service-layer integration tests
+npm test                   # Vitest unit tests — pure logic in electron/lib
+npm run lint               # ESLint 9 flat config
+npm run test:ipc           # Service-layer integration tests under Electron runtime
 npm run build              # Production build
 ```
 
-CI runs all of the above on every PR — see [.github/workflows/ci.yml](.github/workflows/ci.yml).
+CI runs all of the above on every PR — see [.github/workflows/ci.yml](.github/workflows/ci.yml). The Vitest suite covers leveling, command logic, and settings validation; the IPC suite exercises every service module against a disposable userData database, including the order-of-operations contract between moderation, EXP, and presence tracking.
 
 </details>
 
@@ -143,7 +185,7 @@ npx electron scripts/seed-db.cjs --size=medium   # 600 users, 30 streams, ~12k e
 npx electron scripts/seed-db.cjs --size=large    # 1800 users, 60 streams, ~35k events
 ```
 
-Generates a power-law EXP distribution across a 60-day window. Wipes generated tables but preserves your settings.
+Generates a power-law EXP distribution across a 60-day window plus a handful of timers, moderation warnings, permitted users, and automations so the new pages aren't empty. Wipes generated tables but preserves your settings.
 
 ```powershell
 npx electron scripts/inspect-db.cjs   # Read-only dump of the current DB
@@ -157,28 +199,41 @@ npx electron scripts/inspect-db.cjs   # Read-only dump of the current DB
 ```
 electron/
   lib/        Pure logic (leveling, permissions, settings validation) — unit-tested
-  ipc/        Thin IPC handlers with a { success, data, error } envelope
-  services/   Stateful: DB, Twitch auth, chat, EventSub, EXP, streaks, Helix, follower cache
+  ipc/        Thin IPC handlers with a { success, data, error } envelope —
+              auth, bot, commands, timers, moderation, automations, settings,
+              users, sessions, analytics, feed, window, db, credentials, dev
+  services/   Stateful: DB, Twitch auth, chat (tmi), EventSub, Helix, EXP,
+              streaks, follower cache, timers engine, moderation pipeline,
+              automation engine, bot-events bus, feed buffer
   db/         Schema + migrations folder (reserved)
 src/
   lib/        Renderer helpers + shared types
   stores/     Zustand store for ambient state (auth, bot, session)
-  components/ Sidebar, TopBar, LiveFeed, ErrorBoundary, ConfirmProvider, …
-  pages/      One file per route (Dashboard, Commands, Loyalty, Analytics, Settings, SignIn, Popout)
-scripts/      Dev utilities (seed, inspect, test runners, screenshot capture)
+  components/ Sidebar, TopBar, LiveFeed, ErrorBoundary, ConfirmProvider,
+              CredentialsCard, NavHotkeys, …
+  pages/      One file per route — Dashboard, Commands, Timers, Loyalty,
+              Moderation, Automations, Analytics, Settings, SignIn, Popout
+scripts/      seed-db, inspect-db, test-ipc, capture-screenshots
 .github/      CI + release workflows, PR template
 ```
+
+Sidebar nav order: Dashboard → Commands → Timers → Loyalty → Moderation → Automations → Analytics → Settings.
 
 </details>
 
 <details>
 <summary><strong>Architecture notes</strong></summary>
 
-- **No server.** Chat goes over `tmi.js`; events come via Twitch's EventSub WebSocket; metadata queries hit Helix. The app is only ever a client.
+- **No server.** Chat goes over `tmi.js`; events come via Twitch's EventSub WebSocket; metadata + moderation actions hit Helix. The app is only ever a client.
+- **Internal event bus.** A typed `bot-events` emitter decouples the chat/EventSub edges from the consumers. Timers, moderation, automations, and EXP all subscribe via `onBotEvent('chat_message' | 'follow' | 'subscription' | 'sub_gift' | 'cheer' | 'raid' | 'stream_online' | 'stream_offline')` without knowing about each other.
+- **Moderation pipeline.** Incoming chat goes `upsertUser → handleModeration → (block on violation) → handleMessageExp → presence → command dispatch`. Moderation runs *before* EXP and commands so a deleted message doesn't earn EXP, but *after* the user-row upsert so the viewer-presence FK never fires empty. The order is locked in by the `[presence ordering]` block in the IPC suite.
+- **Helix-only mod actions.** Timeouts and message deletions go through `DELETE /moderation/chat` and `POST /moderation/bans` (the modern Helix endpoints). The OAuth flow requests `moderator:manage:chat_messages` and `moderator:manage:banned_users`; the Moderation page surfaces a banner if either scope is missing on the current token.
+- **Automation engine.** On boot it loads enabled rules into memory and subscribes to bot-events. On a matching event it evaluates AND-joined conditions, checks the per-rule cooldown, and runs actions sequentially (`delay` is `await`-based, not blocking). A failed action logs but doesn't abort the chain. Hard caps: 10 actions per automation, 20 automations total. CRUD goes through IPC and reloads the in-memory list.
+- **Timer engine.** Started by the chat-connected handler, stopped on disconnect. A 15-second tick checks each timer's elapsed time and minimum-chat-lines threshold; the chat-line counter resets per-timer on fire.
 - **Secrets encrypted at rest.** OAuth tokens + application credentials use Electron's `safeStorage` (backed by Windows DPAPI / macOS Keychain / libsecret on Linux). No plaintext credentials touch disk.
-- **Resilience:** follower lookups cached 15 min; EventSub reconnect silently backfills missed followers via Helix; chat sends rate-limited through an async queue (1 msg/sec, drops oldest on overflow); Helix calls use a shared rate limiter; Helix `/streams` probe on bot connect recovers state across app restarts; ErrorBoundary wraps the renderer + logs crashes to the main process.
-- **Content Security Policy** locked down for packaged builds. Only `id.twitch.tv`, `api.twitch.tv`, and the two Twitch WebSockets are in `connect-src`.
-- **Keyboard:** `Alt+1` … `Alt+5` jump between pages (dev convenience, always on).
+- **Resilience:** follower lookups cached 15 min; EventSub reconnect silently backfills missed followers via Helix; chat sends rate-limited through an async queue (1 msg/sec, drops oldest on overflow); Helix calls share a rate limiter; Helix `/streams` probe on bot connect recovers state across app restarts; ErrorBoundary wraps the renderer + logs crashes to the main process.
+- **Content Security Policy** locked down for packaged builds. Only `id.twitch.tv`, `api.twitch.tv`, the two Twitch WebSockets, and Discord webhook hosts are reachable from the renderer.
+- **Keyboard:** `Alt+1` … `Alt+8` jump between sidebar pages; `Alt+9` deep-links to the Moderation Logs tab. Used by the screenshot script and handy for manual nav.
 
 </details>
 
@@ -201,6 +256,22 @@ Click the small arrow icon on the Dashboard's **Live feed** or **Top viewers** p
 
 </details>
 
+<details>
+<summary><strong>Refreshing the README screenshots</strong></summary>
+
+Production-mode capture, scripted via PowerShell + Win32 interop:
+
+```powershell
+npm run build
+npx electron scripts/seed-db.cjs --size=medium    # so the new pages have content
+Start-Process powershell -ArgumentList '-Command','npx electron .'
+.\scripts\capture-screenshots.ps1                 # walks Alt+1..8 + Alt+9 for mod logs
+```
+
+The script captures only the client area (no title bar) at 1280×800 and saves PNGs into `docs/screenshots/`.
+
+</details>
+
 ---
 
 ## Contributing
@@ -208,6 +279,7 @@ Click the small arrow icon on the Dashboard's **Live feed** or **Top viewers** p
 Bug reports and PRs welcome. The project follows the [Conventional Commits](https://www.conventionalcommits.org/) format and uses issue-linked branches (`feat/<issue>-<slug>`). Before opening a PR:
 
 ```powershell
+npm run lint
 npm run typecheck
 npm test
 npm run test:ipc
@@ -218,3 +290,7 @@ CI will run the same checks, so it's worth doing locally first.
 ## License
 
 [MIT](LICENSE) — do whatever you want, just don't sue anyone.
+
+---
+
+<sub>Local Windows desktop Twitch bot with loyalty/EXP, custom commands, chat timers, auto-moderation, event-driven automations, and an in-app dashboard. Electron + React + TypeScript.</sub>
