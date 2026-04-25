@@ -11,6 +11,9 @@ Chat commands, EXP and levels, watch streaks, a live event feed, and a dashboard
 ## What it does
 
 - **Runs your bot.** Connects to your Twitch chat and responds to commands — custom ones you write plus 5 built-ins (`!rank`, `!leaderboard`, `!streak`, `!watchtime`, `!commands`).
+- **Sends recurring timers.** Schedule chat reminders that wait for both time and chat activity before posting.
+- **Moderates chat.** Optional filters catch links, caps, emote spam, repeated messages, and symbol spam, then escalate through Helix moderation actions.
+- **Automates events.** Trigger chat messages, sounds, Discord webhooks, timeouts, EXP bonuses, and delays from follows, subs, cheers, raids, and stream state.
 - **Tracks loyalty.** Every viewer who chats accrues EXP, levels up, and builds a watch streak across streams.
 - **Shows you what happened.** A live feed mirrors chat + every follow, sub, cheer, raid, and stream event as they happen. Historical data is charted on the Analytics page.
 - **Keeps your data yours.** Everything lives in a single SQLite file on your machine. You can export it at any time. Zero telemetry, zero third-party servers.
@@ -22,6 +25,18 @@ Chat commands, EXP and levels, watch streaks, a live event feed, and a dashboard
 Custom responses with variables (`{user}`, `{level}`, `{watch_time}`, …), per-command cooldowns, and set-based permissions (any mix of `everyone`, `follower`, `vip`, `subscriber`, `moderator`).
 
 ![Commands](docs/screenshots/02-commands.png)
+
+### Timers
+
+Recurring chat messages with the same variable templates as commands. Each timer can require a minimum number of chat lines since it last fired, so the bot can stay quiet when chat is quiet.
+
+### Moderation
+
+Configurable automatic moderation for links, caps, emotes, repeated messages, and symbol spam. Actions use Twitch Helix moderation endpoints, not deprecated IRC commands, with warning logs and permitted-user controls.
+
+### Automations
+
+Event triggers for follows, subscriptions, gift subs, cheers, raids, stream online, and stream offline. Add optional conditions, cooldowns, and ordered actions: chat messages, sounds, Discord webhook posts, user timeouts, bonus EXP, and short delays.
 
 ### Loyalty & leaderboard
 
@@ -96,6 +111,8 @@ Everything below is editable in-app from the Settings page. Changes apply live �
 | `global_cooldown_seconds` | 2 | Minimum time between any two command invocations. |
 | `level_base` / `level_exponent` | 100 / 1.5 | Level formula: `floor(base × level^exponent)` EXP to level up. |
 | `levelup_announcement` | `{user} just reached level {level}!` | Template. Can be disabled entirely. |
+| `mod_*` | varies | Moderation rule toggles, thresholds, exemptions, permit duration, and escalation timeouts. |
+| `discord_webhook_*` | empty | Named Discord webhook URLs used by Automations. |
 
 ---
 
@@ -106,8 +123,9 @@ Everything below is editable in-app from the Settings page. Changes apply live �
 
 ```powershell
 npm run typecheck          # strict TypeScript (main + renderer)
-npm test                   # Vitest unit tests (45 assertions)
-npm run test:ipc           # Service-layer integration tests (53 assertions)
+npm test                   # Vitest unit tests
+npm run lint               # ESLint
+npm run test:ipc           # Service-layer integration tests
 npm run build              # Production build
 ```
 
@@ -158,7 +176,7 @@ scripts/      Dev utilities (seed, inspect, test runners, screenshot capture)
 
 - **No server.** Chat goes over `tmi.js`; events come via Twitch's EventSub WebSocket; metadata queries hit Helix. The app is only ever a client.
 - **Secrets encrypted at rest.** OAuth tokens + application credentials use Electron's `safeStorage` (backed by Windows DPAPI / macOS Keychain / libsecret on Linux). No plaintext credentials touch disk.
-- **Resilience:** follower lookups cached 15 min; EventSub reconnect silently backfills missed followers via Helix; chat sends rate-limited through an async queue (1 msg/sec, drops oldest on overflow); Helix `/streams` probe on bot connect recovers state across app restarts; ErrorBoundary wraps the renderer + logs crashes to the main process.
+- **Resilience:** follower lookups cached 15 min; EventSub reconnect silently backfills missed followers via Helix; chat sends rate-limited through an async queue (1 msg/sec, drops oldest on overflow); Helix calls use a shared rate limiter; Helix `/streams` probe on bot connect recovers state across app restarts; ErrorBoundary wraps the renderer + logs crashes to the main process.
 - **Content Security Policy** locked down for packaged builds. Only `id.twitch.tv`, `api.twitch.tv`, and the two Twitch WebSockets are in `connect-src`.
 - **Keyboard:** `Alt+1` … `Alt+5` jump between pages (dev convenience, always on).
 
