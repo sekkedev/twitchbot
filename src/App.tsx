@@ -6,7 +6,9 @@ import { NavHotkeys } from './components/NavHotkeys';
 import { NoticeBanner } from './components/NoticeBanner';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
+import { on } from './lib/ipc';
 import { Analytics } from './pages/Analytics';
+import { Automations } from './pages/Automations';
 import { Commands } from './pages/Commands';
 import { Dashboard } from './pages/Dashboard';
 import { Loyalty } from './pages/Loyalty';
@@ -16,6 +18,7 @@ import { Settings as SettingsPage } from './pages/Settings';
 import { SignIn } from './pages/SignIn';
 import { Timers } from './pages/Timers';
 import { useAppStore } from './stores/useAppStore';
+import type { SoundFile } from './lib/types';
 
 const PAGE_TITLES: Record<string, string> = {
   '/': 'Dashboard',
@@ -23,6 +26,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/timers': 'Timers',
   '/loyalty': 'Loyalty',
   '/moderation': 'Moderation',
+  '/automations': 'Automations',
   '/analytics': 'Analytics',
   '/settings': 'Settings',
 };
@@ -38,6 +42,13 @@ export default function App() {
   const location = useLocation();
 
   useEffect(() => init(), [init]);
+  useEffect(() => {
+    const off = on<SoundFile>('sound:play', (sound) => {
+      const audio = new Audio(sound.url);
+      void audio.play();
+    });
+    return off;
+  }, []);
 
   // Popout windows render a bare view — no sidebar, top bar or auth gate.
   if (location.pathname.startsWith('/popout/')) {
@@ -79,6 +90,7 @@ function InnerRoutes() {
           <Route path="/timers" element={<Timers />} />
           <Route path="/loyalty" element={<Loyalty />} />
           <Route path="/moderation" element={<Moderation />} />
+          <Route path="/automations" element={<Automations />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -11,6 +11,7 @@ import {
 import { useConfirm } from '../components/ConfirmProvider';
 import { CredentialsCard } from '../components/CredentialsCard';
 import { invoke, on, tryInvoke } from '../lib/ipc';
+import type { SoundFile } from '../lib/types';
 import { useAppStore } from '../stores/useAppStore';
 
 interface NumericField {
@@ -21,6 +22,11 @@ interface NumericField {
   min?: number;
   max?: number;
   step?: number;
+}
+
+interface DiscordWebhook {
+  key: string;
+  url: string;
 }
 
 const EXP_FIELDS: NumericField[] = [
@@ -53,12 +59,26 @@ export function Settings() {
   const [resetting, setResetting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [userCount, setUserCount] = useState<number | null>(null);
+  const [webhooks, setWebhooks] = useState<DiscordWebhook[]>([]);
+  const [sounds, setSounds] = useState<SoundFile[]>([]);
+  const [soundsDir, setSoundsDir] = useState('');
+  const [newWebhookKey, setNewWebhookKey] = useState('');
+  const [newWebhookUrl, setNewWebhookUrl] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await tryInvoke<Record<string, string>>('settings:get-all');
-    if (res.success) setSettings(res.data);
-    else setError(res.error);
+    const [settingsRes, webhooksRes, soundsRes] = await Promise.all([
+      tryInvoke<Record<string, string>>('settings:get-all'),
+      tryInvoke<DiscordWebhook[]>('discord-webhooks:list'),
+      tryInvoke<{ directory: string; files: SoundFile[] }>('sounds:list'),
+    ]);
+    if (settingsRes.success) setSettings(settingsRes.data);
+    else setError(settingsRes.error);
+    if (webhooksRes.success) setWebhooks(webhooksRes.data);
+    if (soundsRes.success) {
+      setSounds(soundsRes.data.files);
+      setSoundsDir(soundsRes.data.directory);
+    }
     setLoading(false);
   }, []);
 
@@ -160,6 +180,58 @@ export function Settings() {
       setExporting(false);
     }
   }, [showNotice]);
+
+  const saveWebhook = useCallback(
+    async (key: string, url: string) => {
+      setError(null);
+      try {
+        const rows = await invoke<DiscordWebhook[]>('discord-webhooks:save', {
+          key,
+          url,
+        });
+        setWebhooks(rows);
+        setNewWebhookKey('');
+        setNewWebhookUrl('');
+        showNotice('success', `Saved webhook ${key}`, 3000);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Webhook save failed.');
+      }
+    },
+    [showNotice],
+  );
+
+  const deleteWebhook = useCallback(async (key: string) => {
+    const rows = await invoke<DiscordWebhook[]>('discord-webhooks:delete', key);
+    setWebhooks(rows);
+  }, []);
+
+  const testWebhook = useCallback(
+    async (key: string, url?: string) => {
+      setError(null);
+      try {
+        await invoke('discord-webhooks:test', { key, url });
+        showNotice('success', `Webhook ${key} sent a test message`, 3000);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Webhook test failed.');
+      }
+    },
+    [showNotice],
+  );
+
+  const addSound = useCallback(async () => {
+    const result = await invoke<SoundFile[] | null>('sounds:add');
+    if (result) setSounds(result);
+  }, []);
+
+  const deleteSound = useCallback(async (name: string) => {
+    const result = await invoke<SoundFile[]>('sounds:delete', name);
+    setSounds(result);
+  }, []);
+
+  const previewSound = useCallback((sound: SoundFile) => {
+    const audio = new Audio(sound.url);
+    void audio.play();
+  }, []);
 
   const levelBase = Number(settings.level_base ?? '100');
   const levelExponent = Number(settings.level_exponent ?? '1.5');
@@ -382,6 +454,81 @@ export function Settings() {
         </Field>
       </Section>
 
+      <Section title="Discord webhooks">
+        <div className="space-y-2">
+          {webhooks.map((hook) => (
+            <WebhookRow
+              key={hook.key}
+              hook={hook}
+              onSave={saveWebhook}
+              onDelete={deleteWebhook}
+              onTest={testWebhook}
+            />
+          ))}
+          <div className="grid grid-cols-[160px_1fr_auto] gap-2">
+            <input
+              value={newWebhookKey}
+              onChange={(e) => setNewWebhookKey(e.target.value)}
+              placeholder="name"
+              className="border border-border bg-bg px-2.5 py-1.5 font-mono text-xs text-text outline-none focus:border-accent"
+            />
+            <input
+              value={newWebhookUrl}
+              onChange={(e) => setNewWebhookUrl(e.target.value)}
+              placeholder="https://discord.com/api/webhooks/..."
+              className="border border-border bg-bg px-2.5 py-1.5 text-xs text-text outline-none focus:border-accent"
+            />
+            <button
+              onClick={() => {
+                void saveWebhook(newWebhookKey, newWebhookUrl);
+              }}
+              className="border border-accent bg-accent/10 px-3 py-1.5 text-xs uppercase tracking-wider text-accent hover:bg-accent/20"
+            >
+              Add
+            </button>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Sounds" hint={soundsDir}>
+        <div className="space-y-2">
+          <button
+            onClick={() => {
+              void addSound();
+            }}
+            className="border border-accent bg-accent/10 px-3 py-1.5 text-xs uppercase tracking-wider text-accent hover:bg-accent/20"
+          >
+            Add sound
+          </button>
+          <div className="grid gap-1">
+            {sounds.map((sound) => (
+              <div
+                key={sound.name}
+                className="flex items-center justify-between border border-border bg-bg px-3 py-2"
+              >
+                <span className="font-mono text-xs text-text">{sound.name}</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => previewSound(sound)}
+                    className="text-[10px] uppercase tracking-wider text-text-muted hover:text-accent"
+                  >
+                    Play
+                  </button>
+                  <button
+                    onClick={() => {
+                      void deleteSound(sound.name);
+                    }}
+                    className="text-[10px] uppercase tracking-wider text-text-muted hover:text-offline"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Section>
+
       <Section title="Data">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -473,6 +620,57 @@ function Section({
       </div>
       <div className="space-y-4 p-5">{children}</div>
     </section>
+  );
+}
+
+function WebhookRow({
+  hook,
+  onSave,
+  onDelete,
+  onTest,
+}: {
+  hook: DiscordWebhook;
+  onSave: (key: string, url: string) => Promise<void>;
+  onDelete: (key: string) => Promise<void>;
+  onTest: (key: string, url?: string) => Promise<void>;
+}) {
+  const [url, setUrl] = useState(hook.url);
+  useEffect(() => setUrl(hook.url), [hook.url]);
+  return (
+    <div className="grid grid-cols-[160px_1fr_auto_auto_auto] gap-2">
+      <div className="border border-border bg-bg px-2.5 py-1.5 font-mono text-xs text-text">
+        {hook.key}
+      </div>
+      <input
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        className="border border-border bg-bg px-2.5 py-1.5 text-xs text-text outline-none focus:border-accent"
+      />
+      <button
+        onClick={() => {
+          void onTest(hook.key, url);
+        }}
+        className="border border-border bg-bg px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-text-muted hover:bg-bg-hover"
+      >
+        Test
+      </button>
+      <button
+        onClick={() => {
+          void onSave(hook.key, url);
+        }}
+        className="border border-accent/50 bg-accent/10 px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-accent hover:bg-accent/20"
+      >
+        Save
+      </button>
+      <button
+        onClick={() => {
+          void onDelete(hook.key);
+        }}
+        className="border border-offline/40 bg-offline/10 px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-offline hover:bg-offline/20"
+      >
+        Delete
+      </button>
+    </div>
   );
 }
 

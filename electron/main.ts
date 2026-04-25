@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import path from 'node:path';
 import { registerAnalyticsHandlers } from './ipc/analytics';
 import { registerAuthHandlers } from './ipc/auth';
+import { registerAutomationHandlers } from './ipc/automations';
 import { registerBotHandlers } from './ipc/bot';
 import { registerCommandHandlers } from './ipc/commands';
 import { registerCredentialHandlers } from './ipc/credentials';
@@ -17,6 +18,7 @@ import { registerTimerHandlers } from './ipc/timers';
 import { registerUserHandlers } from './ipc/users';
 import { registerWindowHandlers } from './ipc/window';
 import { closeDatabase, initDatabase } from './services/database';
+import { startAutomationEngine, stopAutomationEngine } from './services/automation-engine';
 import { loadCredentialsFromDisk } from './services/credentials';
 import { closeDanglingSession } from './services/streak-tracker';
 import { loadTokensFromDisk } from './services/twitch-auth';
@@ -82,6 +84,7 @@ function installProductionCsp(): void {
     "img-src 'self' data: https:",
     "font-src 'self'",
     "connect-src 'self' https://id.twitch.tv https://api.twitch.tv wss://eventsub.wss.twitch.tv wss://irc-ws.chat.twitch.tv",
+    "media-src 'self' file:",
     "base-uri 'none'",
     "form-action 'none'",
     "frame-ancestors 'none'",
@@ -115,6 +118,7 @@ app.whenReady().then(async () => {
   installProductionCsp();
 
   registerAuthHandlers();
+  registerAutomationHandlers();
   registerBotHandlers();
   registerCommandHandlers();
   registerTimerHandlers();
@@ -139,6 +143,8 @@ app.whenReady().then(async () => {
     console.warn('[auth] failed to restore session:', err);
   }
 
+  startAutomationEngine();
+
   createWindow();
 
   app.on('activate', () => {
@@ -156,5 +162,6 @@ app.on('will-quit', async () => {
   } catch {
     // ignore
   }
+  stopAutomationEngine();
   closeDatabase();
 });

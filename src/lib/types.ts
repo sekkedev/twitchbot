@@ -71,6 +71,59 @@ export interface ModStatus {
   missingScopes: string[];
 }
 
+export type AutomationEventType =
+  | 'follow'
+  | 'subscription'
+  | 'sub_gift'
+  | 'cheer'
+  | 'raid'
+  | 'stream_online'
+  | 'stream_offline';
+
+export interface AutomationCondition {
+  field: string;
+  operator:
+    | 'equals'
+    | 'not_equals'
+    | 'greater_than'
+    | 'less_than'
+    | 'contains'
+    | 'not_contains';
+  value: string | number;
+}
+
+export type AutomationAction =
+  | { type: 'send_chat_message'; message: string }
+  | { type: 'play_sound'; file: string }
+  | { type: 'send_discord_webhook'; webhook_key: string; message: string }
+  | { type: 'timeout_user'; duration: number; reason?: string }
+  | { type: 'add_exp'; amount: number }
+  | { type: 'delay'; seconds: number };
+
+export interface Automation {
+  id: number;
+  name: string;
+  enabled: boolean;
+  event_type: AutomationEventType;
+  conditions: AutomationCondition[];
+  actions: AutomationAction[];
+  cooldown_seconds: number;
+  last_triggered_at: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface AutomationTestResult {
+  matched: boolean;
+  steps: Array<{ action: string; detail: string }>;
+  skippedReason?: string;
+}
+
+export interface SoundFile {
+  name: string;
+  url: string;
+}
+
 export interface UserRow {
   twitch_id: string;
   username: string;
