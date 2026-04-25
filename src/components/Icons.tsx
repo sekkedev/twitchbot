@@ -31,6 +31,15 @@ export function TerminalIcon(props: IconProps) {
   );
 }
 
+export function ClockIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <polyline points="12 7 12 12 15.5 14" />
+    </svg>
+  );
+}
+
 export function TrophyIcon(props: IconProps) {
   return (
     <svg {...baseProps} {...props}>

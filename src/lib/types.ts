@@ -38,6 +38,18 @@ export interface Command {
   created_at: string;
 }
 
+export interface Timer {
+  id: number;
+  name: string;
+  message: string;
+  interval_seconds: number;
+  min_chat_lines: number;
+  enabled: boolean;
+  last_fired_at: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
 export interface UserRow {
   twitch_id: string;
   username: string;

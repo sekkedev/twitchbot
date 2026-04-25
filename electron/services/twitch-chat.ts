@@ -8,6 +8,7 @@ import {
   onStreamOffline,
   onStreamOnline,
 } from './streak-tracker';
+import { startTimerEngine, stopTimerEngine } from './timers-service';
 import { ensureValidToken, getCurrentTokens } from './twitch-auth';
 import { connectEventSub, disconnectEventSub } from './twitch-eventsub';
 import { getCurrentStream } from './twitch-helix';
@@ -88,10 +89,12 @@ export async function connectBot(): Promise<void> {
   client.on('connected', (addr, port) => {
     console.log(`[chat] connected to ${addr}:${port} as ${channel}`);
     setState('connected');
+    startTimerEngine();
   });
 
   client.on('disconnected', (reason) => {
     console.log(`[chat] disconnected: ${reason ?? 'unknown'}`);
+    stopTimerEngine();
     if (state !== 'error') setState('disconnected', reason || null);
   });
 
@@ -220,6 +223,7 @@ async function probeStreamState(broadcasterId: string): Promise<void> {
 }
 
 async function safeDestroy(): Promise<void> {
+  stopTimerEngine();
   // Clear pending sends — they would error out anyway once disconnected.
   sendQueue.length = 0;
   if (!client) return;

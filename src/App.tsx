@@ -13,11 +13,13 @@ import { Loyalty } from './pages/Loyalty';
 import { Popout } from './pages/Popout';
 import { Settings as SettingsPage } from './pages/Settings';
 import { SignIn } from './pages/SignIn';
+import { Timers } from './pages/Timers';
 import { useAppStore } from './stores/useAppStore';
 
 const PAGE_TITLES: Record<string, string> = {
   '/': 'Dashboard',
   '/commands': 'Commands',
+  '/timers': 'Timers',
   '/loyalty': 'Loyalty',
   '/analytics': 'Analytics',
   '/settings': 'Settings',
@@ -72,6 +74,7 @@ function InnerRoutes() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/commands" element={<Commands />} />
+          <Route path="/timers" element={<Timers />} />
           <Route path="/loyalty" element={<Loyalty />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/settings" element={<SettingsPage />} />

@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { useAppStore } from '../stores/useAppStore';
 import {
   BarChartIcon,
+  ClockIcon,
   GearIcon,
   HomeIcon,
   TerminalIcon,
@@ -11,6 +12,7 @@ import {
 const NAV = [
   { to: '/', label: 'Dashboard', icon: HomeIcon, end: true },
   { to: '/commands', label: 'Commands', icon: TerminalIcon, end: false },
+  { to: '/timers', label: 'Timers', icon: ClockIcon, end: false },
   { to: '/loyalty', label: 'Loyalty', icon: TrophyIcon, end: false },
   { to: '/analytics', label: 'Analytics', icon: BarChartIcon, end: false },
   { to: '/settings', label: 'Settings', icon: GearIcon, end: false },
