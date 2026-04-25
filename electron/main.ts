@@ -12,6 +12,7 @@ import { registerDiagnosticsHandlers } from './ipc/diagnostics';
 import { registerFeedHandlers } from './ipc/feed';
 import { registerSessionHandlers } from './ipc/sessions';
 import { registerSettingsHandlers } from './ipc/settings';
+import { registerTimerHandlers } from './ipc/timers';
 import { registerUserHandlers } from './ipc/users';
 import { registerWindowHandlers } from './ipc/window';
 import { closeDatabase, initDatabase } from './services/database';
@@ -115,6 +116,7 @@ app.whenReady().then(async () => {
   registerAuthHandlers();
   registerBotHandlers();
   registerCommandHandlers();
+  registerTimerHandlers();
   registerSessionHandlers();
   registerUserHandlers();
   registerAnalyticsHandlers();
