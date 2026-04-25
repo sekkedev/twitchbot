@@ -71,3 +71,15 @@ CREATE TABLE IF NOT EXISTS settings (
   key    TEXT PRIMARY KEY,
   value  TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS timers (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  name              TEXT NOT NULL,
+  message           TEXT NOT NULL,
+  interval_seconds  INTEGER NOT NULL DEFAULT 300,
+  min_chat_lines    INTEGER NOT NULL DEFAULT 0,
+  enabled           INTEGER NOT NULL DEFAULT 1,
+  last_fired_at     INTEGER,
+  created_at        INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at        INTEGER NOT NULL DEFAULT (unixepoch())
+);
