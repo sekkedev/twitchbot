@@ -10,6 +10,7 @@ import { Analytics } from './pages/Analytics';
 import { Commands } from './pages/Commands';
 import { Dashboard } from './pages/Dashboard';
 import { Loyalty } from './pages/Loyalty';
+import { Moderation } from './pages/Moderation';
 import { Popout } from './pages/Popout';
 import { Settings as SettingsPage } from './pages/Settings';
 import { SignIn } from './pages/SignIn';
@@ -21,6 +22,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/commands': 'Commands',
   '/timers': 'Timers',
   '/loyalty': 'Loyalty',
+  '/moderation': 'Moderation',
   '/analytics': 'Analytics',
   '/settings': 'Settings',
 };
@@ -76,6 +78,7 @@ function InnerRoutes() {
           <Route path="/commands" element={<Commands />} />
           <Route path="/timers" element={<Timers />} />
           <Route path="/loyalty" element={<Loyalty />} />
+          <Route path="/moderation" element={<Moderation />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

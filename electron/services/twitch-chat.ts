@@ -3,6 +3,7 @@ import { broadcast } from '../ipc/broadcast';
 import { emitBotEvent } from './bot-events';
 import { handleChatMessage } from './command-engine';
 import { handleMessageExp } from './exp-engine';
+import { handleModeration } from './moderation-service';
 import {
   getCurrentSessionId,
   onStreamOffline,
@@ -13,6 +14,7 @@ import { ensureValidToken, getCurrentTokens } from './twitch-auth';
 import { connectEventSub, disconnectEventSub } from './twitch-eventsub';
 import { getCurrentStream } from './twitch-helix';
 import { onChatMessage as streakOnChatMessage } from './streak-tracker';
+import { upsertUser } from './users-repo';
 
 export type BotState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -104,29 +106,9 @@ export async function connectBot(): Promise<void> {
     console.log(`[chat] <${msg.user.displayName}> ${msg.message}`);
     emitBotEvent('chat_message', msg);
     broadcast('twitch:chat-message', msg);
-    // EXP first: handleMessageExp upserts the users row. streakOnChatMessage
-    // writes to viewer_sessions which has a FK to users.twitch_id, so running
-    // it before the upsert loses a brand-new chatter's first message.
-    try {
-      handleMessageExp(msg);
-    } catch (err) {
-      console.error('[exp] message handler error:', err);
-    }
-    try {
-      streakOnChatMessage(msg);
-    } catch (err) {
-      console.error('[session] chat presence error:', err);
-    }
-    void handleChatMessage(msg).catch((err) =>
-      console.error('[cmd] handleChatMessage error:', err),
+    void processIncomingMessage(msg).catch((err) =>
+      console.error('[chat] message pipeline error:', err),
     );
-    for (const handler of messageHandlers) {
-      try {
-        handler(msg);
-      } catch (err) {
-        console.error('[chat] handler error:', err);
-      }
-    }
   });
 
   try {
@@ -142,6 +124,34 @@ export async function connectBot(): Promise<void> {
     setState('error', message);
     await safeDestroy();
     throw err;
+  }
+}
+
+async function processIncomingMessage(msg: ChatMessage): Promise<void> {
+  upsertUser(msg.user.id, msg.user.displayName);
+
+  const blocked = await handleModeration(msg);
+  if (blocked) return;
+
+  try {
+    handleMessageExp(msg);
+  } catch (err) {
+    console.error('[exp] message handler error:', err);
+  }
+  try {
+    streakOnChatMessage(msg);
+  } catch (err) {
+    console.error('[session] chat presence error:', err);
+  }
+  await handleChatMessage(msg).catch((err) =>
+    console.error('[cmd] handleChatMessage error:', err),
+  );
+  for (const handler of messageHandlers) {
+    try {
+      handler(msg);
+    } catch (err) {
+      console.error('[chat] handler error:', err);
+    }
   }
 }
 

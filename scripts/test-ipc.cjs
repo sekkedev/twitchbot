@@ -42,7 +42,7 @@ async function main() {
   fs.mkdirSync(tmpDir, { recursive: true });
   app.setPath('userData', tmpDir);
 
-  const { initDatabase, getDatabase, closeDatabase } = require('../dist-electron/services/database.js');
+  const { initDatabase, getDatabase, closeDatabase, DEFAULT_SETTINGS } = require('../dist-electron/services/database.js');
   const settings = require('../dist-electron/services/settings-service.js');
   const commandEngine = require('../dist-electron/services/command-engine.js');
   const usersRepo = require('../dist-electron/services/users-repo.js');
@@ -81,9 +81,10 @@ async function main() {
   try {
     console.log('\n[settings]');
     const allDefaults = settings.getAllSettings();
+    const defaultCount = Object.keys(DEFAULT_SETTINGS).length;
     assert(
-      Object.keys(allDefaults).length === 16,
-      'get-all returns 16 seeded defaults',
+      Object.keys(allDefaults).length === defaultCount,
+      `get-all returns ${defaultCount} seeded defaults`,
       Object.keys(allDefaults).length,
     );
     assert(allDefaults.bot_prefix === '!', 'default bot_prefix = "!"');
