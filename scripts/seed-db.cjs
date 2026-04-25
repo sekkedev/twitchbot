@@ -137,6 +137,15 @@ function main() {
     DELETE FROM sessions;
     DELETE FROM users;
   `);
+  // Newer feature tables — wipe defensively so reseeds don't accumulate dupes.
+  // Wrapped because older DBs may not have these tables yet.
+  for (const table of ['timers', 'mod_warnings', 'mod_permitted_users', 'automations']) {
+    try {
+      db.exec(`DELETE FROM ${table};`);
+    } catch {
+      // table doesn't exist yet — schema will create it on next app boot
+    }
+  }
 
   const baseRow = db
     .prepare("SELECT value FROM settings WHERE key = 'level_base'")
@@ -347,6 +356,193 @@ function main() {
     }
   })();
 
+  // --- Timers ---
+  console.log('Generating timers…');
+  const timerSamples = [
+    {
+      name: 'Discord promo',
+      message: 'Join the Discord for clips, schedule, and chat: discord.gg/yourserver',
+      interval_seconds: 1800,
+      min_chat_lines: 5,
+      enabled: 1,
+    },
+    {
+      name: 'Schedule reminder',
+      message: 'Streaming Mon / Wed / Fri at 7 PM CET. Use !schedule to check.',
+      interval_seconds: 2400,
+      min_chat_lines: 8,
+      enabled: 1,
+    },
+    {
+      name: 'Lurk shoutout',
+      message: 'Big shoutout to lurkers — you keep the stream going. <3',
+      interval_seconds: 3600,
+      min_chat_lines: 0,
+      enabled: 1,
+    },
+    {
+      name: 'Charity drive',
+      message: 'Charity drive ends Friday — every sub adds $5 to the pot!',
+      interval_seconds: 900,
+      min_chat_lines: 10,
+      enabled: 0,
+    },
+  ];
+  const insertTimer = db.prepare(`
+    INSERT INTO timers (name, message, interval_seconds, min_chat_lines, enabled, last_fired_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const nowSeconds = Math.floor(now / 1000);
+  try {
+    db.transaction(() => {
+      for (const t of timerSamples) {
+        insertTimer.run(
+          t.name,
+          t.message,
+          t.interval_seconds,
+          t.min_chat_lines,
+          t.enabled,
+          t.enabled
+            ? nowSeconds - randint(60, t.interval_seconds)
+            : null,
+          nowSeconds - randint(7 * 86_400, 30 * 86_400),
+          nowSeconds - randint(1, 7 * 86_400),
+        );
+      }
+    })();
+  } catch (err) {
+    console.warn('  skipping timers (table missing — boot the app once first):', err.message);
+  }
+
+  // --- Mod warnings ---
+  console.log('Generating mod_warnings…');
+  const modRules = ['links', 'caps', 'emote', 'repeat', 'symbols'];
+  const modActions = ['delete', 'timeout_10', 'timeout_600', 'timeout_86400'];
+  const sampleModMessages = {
+    links: 'check this site bro https://sketchy.example/ref=123',
+    caps: 'OMG WHY DID THAT JUST HAPPEN LOL',
+    emote: 'Kappa Kappa Kappa Kappa Kappa Kappa Kappa Kappa Kappa Kappa Kappa Kappa',
+    repeat: 'first',
+    symbols: '!!!!!!!!!!!!!!!!!!!!!!!!!!!!@@@##$%^&*()',
+  };
+  const warningCount = Math.min(40, Math.floor(size.users * 0.05));
+  const insertWarning = db.prepare(`
+    INSERT INTO mod_warnings (user_id, username, rule, message_text, action_taken, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  try {
+    db.transaction(() => {
+      for (let i = 0; i < warningCount; i++) {
+        const u = choice(users);
+        const rule = choice(modRules);
+        const action = choice(modActions);
+        const daysAgo = Math.floor(14 * Math.pow(Math.random(), 1.4));
+        insertWarning.run(
+          u.twitch_id,
+          u.username,
+          rule,
+          sampleModMessages[rule],
+          action,
+          nowSeconds - daysAgo * 86_400 - randint(0, 86_400),
+        );
+      }
+    })();
+  } catch (err) {
+    console.warn('  skipping mod_warnings:', err.message);
+  }
+
+  // --- Permitted users ---
+  console.log('Generating mod_permitted_users…');
+  const insertPermitted = db.prepare(`
+    INSERT INTO mod_permitted_users (user_id, username, created_at)
+    VALUES (?, ?, ?)
+  `);
+  try {
+    db.transaction(() => {
+      const picks = [...users].sort(() => Math.random() - 0.5).slice(0, 5);
+      for (const u of picks) {
+        insertPermitted.run(
+          u.twitch_id,
+          u.username,
+          nowSeconds - randint(7, 60) * 86_400,
+        );
+      }
+    })();
+  } catch (err) {
+    console.warn('  skipping mod_permitted_users:', err.message);
+  }
+
+  // --- Automations ---
+  console.log('Generating automations…');
+  const automationSamples = [
+    {
+      name: 'Welcome new followers',
+      enabled: 1,
+      event_type: 'follow',
+      conditions: [],
+      actions: [
+        { type: 'send_chat_message', message: 'Welcome {user} to the squad! 💜' },
+        { type: 'add_exp', amount: 25 },
+      ],
+      cooldown_seconds: 0,
+    },
+    {
+      name: 'Big raid alert',
+      enabled: 1,
+      event_type: 'raid',
+      conditions: [{ field: 'viewer_count', operator: 'greater_than', value: 25 }],
+      actions: [
+        { type: 'send_chat_message', message: '🚨 RAID 🚨 Welcome {raid_viewers} from {raid_from}!' },
+        { type: 'send_discord_webhook', webhook_url_key: 'raids', message: '{raid_from} just raided with {raid_viewers} viewers' },
+      ],
+      cooldown_seconds: 30,
+    },
+    {
+      name: 'Sub celebration',
+      enabled: 1,
+      event_type: 'subscription',
+      conditions: [],
+      actions: [
+        { type: 'send_chat_message', message: 'Huge thanks {user} for the sub! 🎉' },
+        { type: 'play_sound', file: 'sub.mp3' },
+      ],
+      cooldown_seconds: 0,
+    },
+    {
+      name: 'Stream goes live → Discord',
+      enabled: 0,
+      event_type: 'stream_online',
+      conditions: [],
+      actions: [
+        { type: 'send_discord_webhook', webhook_url_key: 'default', message: 'Stream is live! Come hang out.' },
+      ],
+      cooldown_seconds: 600,
+    },
+  ];
+  const insertAutomation = db.prepare(`
+    INSERT INTO automations (name, enabled, event_type, conditions, actions, cooldown_seconds, last_triggered_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  try {
+    db.transaction(() => {
+      for (const a of automationSamples) {
+        insertAutomation.run(
+          a.name,
+          a.enabled,
+          a.event_type,
+          JSON.stringify(a.conditions),
+          JSON.stringify(a.actions),
+          a.cooldown_seconds,
+          a.enabled ? nowSeconds - randint(0, 7 * 86_400) : null,
+          nowSeconds - randint(14, 60) * 86_400,
+          nowSeconds - randint(0, 7 * 86_400),
+        );
+      }
+    })();
+  } catch (err) {
+    console.warn('  skipping automations:', err.message);
+  }
+
   // --- Summary ---
   const summary = {
     users: db.prepare('SELECT COUNT(*) AS n FROM users').get().n,
@@ -360,6 +556,13 @@ function main() {
       .prepare('SELECT COALESCE(SUM(exp), 0) AS n FROM users')
       .get().n,
   };
+  for (const t of ['timers', 'mod_warnings', 'mod_permitted_users', 'automations']) {
+    try {
+      summary[t] = db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get().n;
+    } catch {
+      // table missing — ignore
+    }
+  }
 
   console.log('\nSeeded:');
   for (const [k, v] of Object.entries(summary)) {

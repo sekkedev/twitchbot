@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useConfirm } from '../components/ConfirmProvider';
 import { PlusIcon, TrashIcon } from '../components/Icons';
 import { invoke, on, tryInvoke } from '../lib/ipc';
@@ -42,7 +43,24 @@ export function Moderation() {
   const confirm = useConfirm();
   const login = useAppStore((s) => s.login);
   const auth = useAppStore((s) => s.auth);
-  const [tab, setTab] = useState<Tab>('rules');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTab: Tab = searchParams.get('tab') === 'logs' ? 'logs' : 'rules';
+  const [tab, setTabState] = useState<Tab>(urlTab);
+  // Sync tab state if the URL changes (e.g. Alt+9 nav into /moderation?tab=logs
+  // while already mounted on /moderation).
+  useEffect(() => {
+    setTabState(urlTab);
+  }, [urlTab]);
+  const setTab = useCallback(
+    (next: Tab) => {
+      setTabState(next);
+      const nextParams = new URLSearchParams(searchParams);
+      if (next === 'rules') nextParams.delete('tab');
+      else nextParams.set('tab', next);
+      setSearchParams(nextParams, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
   const [settings, setSettings] = useState<Record<string, string>>(DEFAULT_SETTINGS);
   const [warnings, setWarnings] = useState<ModWarning[]>([]);
   const [permitted, setPermitted] = useState<PermittedUser[]>([]);
