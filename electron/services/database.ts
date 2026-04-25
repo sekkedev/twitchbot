@@ -42,6 +42,9 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
   mod_escalation_2_timeout: '10',
   mod_escalation_3_timeout: '600',
   mod_escalation_4_timeout: '86400',
+  discord_webhook_default: '',
+  discord_webhook_raids: '',
+  discord_webhook_follows: '',
 };
 
 let db: DB | null = null;

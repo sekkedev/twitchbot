@@ -104,3 +104,16 @@ CREATE TABLE IF NOT EXISTS mod_permitted_users (
   username    TEXT NOT NULL,
   created_at  INTEGER NOT NULL DEFAULT (unixepoch())
 );
+
+CREATE TABLE IF NOT EXISTS automations (
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  name               TEXT NOT NULL,
+  enabled            INTEGER NOT NULL DEFAULT 1,
+  event_type         TEXT NOT NULL,
+  conditions         TEXT NOT NULL DEFAULT '[]',
+  actions            TEXT NOT NULL DEFAULT '[]',
+  cooldown_seconds   INTEGER NOT NULL DEFAULT 0,
+  last_triggered_at  INTEGER,
+  created_at         INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at         INTEGER NOT NULL DEFAULT (unixepoch())
+);

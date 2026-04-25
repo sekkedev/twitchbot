@@ -37,3 +37,11 @@ export function updateSetting(key: string, value: unknown): void {
 
   broadcast('settings:updated', { key, value: stored });
 }
+
+export function deleteSetting(key: string): void {
+  if (!isKnownSettingKey(key)) {
+    throw new Error(`Unknown setting key: ${key}`);
+  }
+  getDatabase().prepare('DELETE FROM settings WHERE key = ?').run(key);
+  broadcast('settings:deleted', { key });
+}
