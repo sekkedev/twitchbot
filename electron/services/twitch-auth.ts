@@ -9,13 +9,20 @@ import { clearCache as clearFollowerCache } from './follower-cache';
 const TWITCH_AUTH_BASE = 'https://id.twitch.tv/oauth2';
 const TWITCH_HELIX = 'https://api.twitch.tv/helix';
 
-const SCOPES = [
+const BASE_SCOPES = [
   'chat:read',
   'chat:edit',
   'channel:read:subscriptions',
   'bits:read',
   'moderator:read:followers',
-];
+] as const;
+
+export const MODERATION_SCOPES = [
+  'moderator:manage:chat_messages',
+  'moderator:manage:banned_users',
+] as const;
+
+const SCOPES = [...BASE_SCOPES, ...MODERATION_SCOPES];
 
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
 const OAUTH_CALLBACK_PORT = 42817;
@@ -330,13 +337,23 @@ export function getAuthStatus(): {
   loggedIn: boolean;
   username: string | null;
   channel: string | null;
+  scopes: string[];
 } {
-  if (!currentTokens) return { loggedIn: false, username: null, channel: null };
+  if (!currentTokens) {
+    return { loggedIn: false, username: null, channel: null, scopes: [] };
+  }
   return {
     loggedIn: true,
     username: currentTokens.user.display_name,
     channel: currentTokens.user.login,
+    scopes: currentTokens.scopes,
   };
+}
+
+export function hasScopes(required: readonly string[]): boolean {
+  const tokens = currentTokens;
+  if (!tokens) return false;
+  return required.every((scope) => tokens.scopes.includes(scope));
 }
 
 export async function ensureValidToken(): Promise<StoredTokens | null> {

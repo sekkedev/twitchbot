@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
 import { broadcast } from '../ipc/broadcast';
+import { emitBotEvent } from './bot-events';
 import {
   handleCheerExp,
   handleFollowExp,
@@ -298,10 +299,12 @@ function handleNotification(data: EventSubMessage['payload']): void {
   switch (subType) {
     case 'channel.follow': {
       const user = userFromEvent();
-      broadcast('twitch:follow', {
+      const payload = {
         user,
         timestamp: (event.followed_at as string) ?? now,
-      });
+      };
+      emitBotEvent('follow', payload);
+      broadcast('twitch:follow', payload);
       safeExp(() => {
         handleFollowExp(user.id, user.displayName);
         markFollowing(user.id);
@@ -312,13 +315,15 @@ function handleNotification(data: EventSubMessage['payload']): void {
       const user = userFromEvent();
       const tier = String(event.tier ?? '1000');
       const isGift = Boolean(event.is_gift);
-      broadcast('twitch:subscribe', {
+      const payload = {
         user,
         tier,
         months: 1,
         isGift,
         timestamp: now,
-      });
+      };
+      emitBotEvent('subscription', payload);
+      broadcast('twitch:subscribe', payload);
       safeExp(() => handleSubscribeExp(user.id, user.displayName, tier, 1, isGift));
       break;
     }
@@ -327,14 +332,16 @@ function handleNotification(data: EventSubMessage['payload']): void {
       const tier = String(event.tier ?? '1000');
       const months = Number(event.cumulative_months ?? 1);
       const message = event.message as { text?: string } | undefined;
-      broadcast('twitch:subscribe', {
+      const payload = {
         user,
         tier,
         months,
         isGift: false,
         message: message?.text ?? null,
         timestamp: now,
-      });
+      };
+      emitBotEvent('subscription', payload);
+      broadcast('twitch:subscribe', payload);
       safeExp(() => handleSubscribeExp(user.id, user.displayName, tier, months, false));
       break;
     }
@@ -343,13 +350,15 @@ function handleNotification(data: EventSubMessage['payload']): void {
       const user = isAnonymous ? null : userFromEvent();
       const total = Number(event.total ?? 1);
       const tier = String(event.tier ?? '1000');
-      broadcast('twitch:gift-sub', {
+      const payload = {
         user,
         total,
         tier,
         isAnonymous,
         timestamp: now,
-      });
+      };
+      emitBotEvent('sub_gift', payload);
+      broadcast('twitch:gift-sub', payload);
       safeExp(() =>
         handleGiftSubExp(
           user?.id ?? null,
@@ -365,12 +374,14 @@ function handleNotification(data: EventSubMessage['payload']): void {
       const isAnonymous = Boolean(event.is_anonymous);
       const user = isAnonymous ? null : userFromEvent();
       const bits = Number(event.bits ?? 0);
-      broadcast('twitch:cheer', {
+      const payload = {
         user,
         bits,
         message: String(event.message ?? ''),
         timestamp: now,
-      });
+      };
+      emitBotEvent('cheer', payload);
+      broadcast('twitch:cheer', payload);
       safeExp(() =>
         handleCheerExp(user?.id ?? null, user?.displayName ?? null, bits, isAnonymous),
       );
@@ -379,24 +390,30 @@ function handleNotification(data: EventSubMessage['payload']): void {
     case 'channel.raid': {
       const fromChannel = String(event.from_broadcaster_user_login ?? '');
       const viewers = Number(event.viewers ?? 0);
-      broadcast('twitch:raid', {
+      const payload = {
         fromChannel,
         fromDisplayName: String(
           event.from_broadcaster_user_name ?? event.from_broadcaster_user_login ?? '',
         ),
         viewers,
         timestamp: now,
-      });
+      };
+      emitBotEvent('raid', payload);
+      broadcast('twitch:raid', payload);
       safeExp(() => handleRaidExp(viewers, fromChannel));
       break;
     }
     case 'stream.online':
+      emitBotEvent('stream_online', {
+        timestamp: (event.started_at as string) ?? now,
+      });
       broadcast('twitch:stream-online', {
         timestamp: (event.started_at as string) ?? now,
       });
       safeExp(onStreamOnline);
       break;
     case 'stream.offline':
+      emitBotEvent('stream_offline', { timestamp: now });
       broadcast('twitch:stream-offline', { timestamp: now });
       safeExp(onStreamOffline);
       break;

@@ -2,6 +2,8 @@ import { ensureValidToken } from './twitch-auth';
 
 const HELIX = 'https://api.twitch.tv/helix';
 
+type HelixMethod = 'GET' | 'POST' | 'DELETE' | 'PATCH' | 'PUT';
+
 export interface HelixStream {
   id: string;
   user_id: string;
@@ -27,9 +29,13 @@ export interface HelixPage<T> {
   pagination?: { cursor?: string };
 }
 
-async function helixGet<T>(
+export async function helixRequest<T>(
   endpoint: string,
-  query?: Record<string, string | string[] | undefined>,
+  options: {
+    method?: HelixMethod;
+    query?: Record<string, string | string[] | undefined>;
+    body?: unknown;
+  } = {},
 ): Promise<T> {
   const tokens = await ensureValidToken();
   if (!tokens) throw new Error('Not signed in.');
@@ -37,8 +43,8 @@ async function helixGet<T>(
   if (!clientId) throw new Error('TWITCH_CLIENT_ID not set.');
 
   const url = new URL(`${HELIX}${endpoint}`);
-  if (query) {
-    for (const [key, value] of Object.entries(query)) {
+  if (options.query) {
+    for (const [key, value] of Object.entries(options.query)) {
       if (value === undefined) continue;
       if (Array.isArray(value)) {
         for (const v of value) url.searchParams.append(key, v);
@@ -48,18 +54,35 @@ async function helixGet<T>(
     }
   }
 
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${tokens.access_token}`,
+    'Client-Id': clientId,
+  };
+  let body: string | undefined;
+  if (options.body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify(options.body);
+  }
+
   const res = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${tokens.access_token}`,
-      'Client-Id': clientId,
-    },
+    method: options.method ?? 'GET',
+    headers,
+    body,
   });
 
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Helix ${endpoint} failed: ${res.status} ${text}`);
   }
+  if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+async function helixGet<T>(
+  endpoint: string,
+  query?: Record<string, string | string[] | undefined>,
+): Promise<T> {
+  return helixRequest<T>(endpoint, { query });
 }
 
 /**
