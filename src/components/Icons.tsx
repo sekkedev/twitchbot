@@ -62,6 +62,14 @@ export function ShieldIcon(props: IconProps) {
   );
 }
 
+export function ZapIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <polygon points="13 2 3 14 11 14 10 22 21 9 13 9" />
+    </svg>
+  );
+}
+
 export function BarChartIcon(props: IconProps) {
   return (
     <svg {...baseProps} {...props}>
