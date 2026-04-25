@@ -83,3 +83,24 @@ CREATE TABLE IF NOT EXISTS timers (
   created_at        INTEGER NOT NULL DEFAULT (unixepoch()),
   updated_at        INTEGER NOT NULL DEFAULT (unixepoch())
 );
+
+CREATE TABLE IF NOT EXISTS mod_warnings (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id       TEXT NOT NULL,
+  username      TEXT NOT NULL,
+  rule          TEXT NOT NULL,
+  message_text  TEXT,
+  action_taken  TEXT NOT NULL,
+  created_at    INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE INDEX IF NOT EXISTS idx_mod_warnings_user
+  ON mod_warnings(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_mod_warnings_rule
+  ON mod_warnings(rule, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS mod_permitted_users (
+  user_id     TEXT PRIMARY KEY,
+  username    TEXT NOT NULL,
+  created_at  INTEGER NOT NULL DEFAULT (unixepoch())
+);
