@@ -2,6 +2,7 @@ export interface AuthStatus {
   loggedIn: boolean;
   username: string | null;
   channel: string | null;
+  scopes: string[];
 }
 
 export type BotState = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -92,6 +93,7 @@ export interface ActivityData {
 }
 
 export interface ChatMessagePayload {
+  id: string | null;
   user: {
     id: string;
     login: string;
@@ -105,6 +107,7 @@ export interface ChatMessagePayload {
     };
   };
   message: string;
+  emotes: Record<string, string[]> | null;
   timestamp: string;
   channel: string;
 }

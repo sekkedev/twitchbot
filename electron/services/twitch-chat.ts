@@ -1,5 +1,6 @@
 import tmi from 'tmi.js';
 import { broadcast } from '../ipc/broadcast';
+import { emitBotEvent } from './bot-events';
 import { handleChatMessage } from './command-engine';
 import { handleMessageExp } from './exp-engine';
 import {
@@ -15,6 +16,7 @@ import { onChatMessage as streakOnChatMessage } from './streak-tracker';
 export type BotState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 export interface ChatMessage {
+  id: string | null;
   user: {
     id: string;
     login: string;
@@ -28,6 +30,7 @@ export interface ChatMessage {
     };
   };
   message: string;
+  emotes: Record<string, string[]> | null;
   timestamp: string;
   channel: string;
 }
@@ -96,6 +99,7 @@ export async function connectBot(): Promise<void> {
     if (self) return;
     const msg = normalizeMessage(chan, tags, text);
     console.log(`[chat] <${msg.user.displayName}> ${msg.message}`);
+    emitBotEvent('chat_message', msg);
     broadcast('twitch:chat-message', msg);
     // EXP first: handleMessageExp upserts the users row. streakOnChatMessage
     // writes to viewer_sessions which has a FK to users.twitch_id, so running
@@ -235,8 +239,10 @@ function normalizeMessage(
 ): ChatMessage {
   const badges = tags.badges ?? {};
   return {
+    id: tags.id ?? null,
     channel: channel.replace(/^#/, ''),
     message: text,
+    emotes: (tags.emotes as Record<string, string[]> | undefined) ?? null,
     timestamp: new Date().toISOString(),
     user: {
       id: tags['user-id'] ?? '',
