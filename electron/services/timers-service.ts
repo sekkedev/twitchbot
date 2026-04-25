@@ -1,4 +1,8 @@
+import { buildCommandVariables, interpolate } from './command-engine';
 import { getDatabase } from './database';
+import { onBotEvent } from './bot-events';
+import { getCurrentTokens } from './twitch-auth';
+import { getBotState, sendChat, type ChatMessage } from './twitch-chat';
 
 export interface TimerRow {
   id: number;
@@ -41,6 +45,11 @@ export interface TimerUpdate {
   enabled?: boolean;
 }
 
+const TICK_MS = 15_000;
+const MAX_CHAT_LENGTH = 480;
+
+let timerLoop: NodeJS.Timeout | null = null;
+let unsubscribeChat: (() => void) | null = null;
 const chatLinesSinceFire = new Map<number, number>();
 
 export function listTimers(): TimerRow[] {
@@ -106,12 +115,103 @@ export function toggleTimer(id: number): TimerRow {
   return updateTimer({ id, enabled: !existing.enabled });
 }
 
+export function startTimerEngine(): void {
+  if (!unsubscribeChat) {
+    unsubscribeChat = onBotEvent('chat_message', () => {
+      const rows = getEnabledTimerIds();
+      for (const id of rows) {
+        chatLinesSinceFire.set(id, (chatLinesSinceFire.get(id) ?? 0) + 1);
+      }
+    });
+  }
+  if (timerLoop) return;
+  timerLoop = setInterval(() => {
+    void tickTimers().catch((err) => console.error('[timers] tick failed:', err));
+  }, TICK_MS);
+}
+
+export function stopTimerEngine(): void {
+  if (timerLoop) {
+    clearInterval(timerLoop);
+    timerLoop = null;
+  }
+  if (unsubscribeChat) {
+    unsubscribeChat();
+    unsubscribeChat = null;
+  }
+  chatLinesSinceFire.clear();
+}
+
+async function tickTimers(): Promise<void> {
+  if (getBotState().state !== 'connected') return;
+
+  const timers = getDatabase()
+    .prepare('SELECT * FROM timers WHERE enabled = 1 ORDER BY id')
+    .all() as TimerDbRow[];
+  const now = Math.floor(Date.now() / 1000);
+
+  for (const row of timers) {
+    const timer = rowToTimer(row);
+    if (!timer.message.trim()) continue;
+    const last = timer.last_fired_at ?? 0;
+    if (now - last < timer.interval_seconds) continue;
+    const lines = chatLinesSinceFire.get(timer.id) ?? 0;
+    if (lines < timer.min_chat_lines) continue;
+
+    const message = await resolveTimerMessage(timer.message);
+    if (!message.trim()) continue;
+
+    await sendChat(
+      message.length > MAX_CHAT_LENGTH
+        ? `${message.slice(0, MAX_CHAT_LENGTH - 1)}...`
+        : message,
+    );
+    getDatabase()
+      .prepare('UPDATE timers SET last_fired_at = ?, updated_at = unixepoch() WHERE id = ?')
+      .run(now, timer.id);
+    chatLinesSinceFire.set(timer.id, 0);
+  }
+}
+
+async function resolveTimerMessage(template: string): Promise<string> {
+  const tokens = getCurrentTokens();
+  if (!tokens) return template;
+  const msg: ChatMessage = {
+    id: null,
+    channel: tokens.user.login,
+    message: '',
+    emotes: null,
+    timestamp: new Date().toISOString(),
+    user: {
+      id: tokens.user.id,
+      login: tokens.user.login,
+      displayName: tokens.user.display_name,
+      color: null,
+      roles: {
+        broadcaster: true,
+        moderator: true,
+        vip: false,
+        subscriber: false,
+      },
+    },
+  };
+  const vars = await buildCommandVariables(msg);
+  return interpolate(template, vars);
+}
+
 function getTimer(id: number): TimerRow {
   const row = getDatabase()
     .prepare('SELECT * FROM timers WHERE id = ?')
     .get(id) as TimerDbRow | undefined;
   if (!row) throw new Error(`Timer ${id} not found.`);
   return rowToTimer(row);
+}
+
+function getEnabledTimerIds(): number[] {
+  const rows = getDatabase()
+    .prepare('SELECT id FROM timers WHERE enabled = 1')
+    .all() as { id: number }[];
+  return rows.map((row) => row.id);
 }
 
 function normalizeTimerInput(input: TimerInput): Required<TimerInput> {
