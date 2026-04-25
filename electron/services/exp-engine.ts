@@ -5,6 +5,7 @@ import { getDatabase } from './database';
 import { getCurrentTokens } from './twitch-auth';
 import type { ChatMessage } from './twitch-chat';
 import { sendChat } from './twitch-chat';
+import { upsertUser } from './users-repo';
 
 export { computeLevel, expForNextLevel } from '../lib/leveling';
 
@@ -33,20 +34,6 @@ interface ExpSettings {
   levelExponent: number;
   levelupAnnouncement: string;
   levelupAnnounceEnabled: boolean;
-}
-
-interface UserRow {
-  twitch_id: string;
-  username: string;
-  exp: number;
-  level: number;
-  watch_time_minutes: number;
-  messages_sent: number;
-  watch_streak: number;
-  best_watch_streak: number;
-  last_stream_attended: number | null;
-  first_seen: string;
-  last_seen: string;
 }
 
 const MESSAGE_WINDOW_MS = 60_000;
@@ -91,31 +78,6 @@ function loadSettings(): ExpSettings {
     ),
     levelupAnnounceEnabled: num('levelup_announce_enabled', 1) === 1,
   };
-}
-
-function upsertUser(twitchId: string, username: string): UserRow {
-  const db = getDatabase();
-  const now = new Date().toISOString();
-  const existing = db
-    .prepare('SELECT * FROM users WHERE twitch_id = ?')
-    .get(twitchId) as UserRow | undefined;
-
-  if (!existing) {
-    db.prepare(
-      `INSERT INTO users (twitch_id, username, first_seen, last_seen)
-       VALUES (?, ?, ?, ?)`,
-    ).run(twitchId, username, now, now);
-    return db
-      .prepare('SELECT * FROM users WHERE twitch_id = ?')
-      .get(twitchId) as UserRow;
-  }
-
-  db.prepare('UPDATE users SET username = ?, last_seen = ? WHERE twitch_id = ?').run(
-    username,
-    now,
-    twitchId,
-  );
-  return { ...existing, username, last_seen: now };
 }
 
 function logEvent(

@@ -19,9 +19,14 @@ export function getSetting(key: string, fallback?: string): string | undefined {
 }
 
 const KNOWN_KEYS = new Set(Object.keys(DEFAULT_SETTINGS));
+const KNOWN_PREFIXES = ['mod_', 'discord_webhook_'] as const;
+
+function isKnownSettingKey(key: string): boolean {
+  return KNOWN_KEYS.has(key) || KNOWN_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
 
 export function updateSetting(key: string, value: unknown): void {
-  if (!KNOWN_KEYS.has(key)) {
+  if (!isKnownSettingKey(key)) {
     throw new Error(`Unknown setting key: ${key}`);
   }
   const stored = normalizeSetting(key, value);

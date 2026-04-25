@@ -63,6 +63,31 @@ export interface ListUsersResult {
   total: number;
 }
 
+export function upsertUser(twitchId: string, username: string): UserRow {
+  const db = getDatabase();
+  const now = new Date().toISOString();
+  const existing = db
+    .prepare('SELECT * FROM users WHERE twitch_id = ?')
+    .get(twitchId) as UserRow | undefined;
+
+  if (!existing) {
+    db.prepare(
+      `INSERT INTO users (twitch_id, username, first_seen, last_seen)
+       VALUES (?, ?, ?, ?)`,
+    ).run(twitchId, username, now, now);
+    return db
+      .prepare('SELECT * FROM users WHERE twitch_id = ?')
+      .get(twitchId) as UserRow;
+  }
+
+  db.prepare('UPDATE users SET username = ?, last_seen = ? WHERE twitch_id = ?').run(
+    username,
+    now,
+    twitchId,
+  );
+  return { ...existing, username, last_seen: now };
+}
+
 export function listUsers(opts: ListUsersOptions = {}): ListUsersResult {
   const db = getDatabase();
   const sort = opts.sort ?? 'exp';

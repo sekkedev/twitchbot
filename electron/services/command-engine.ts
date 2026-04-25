@@ -98,7 +98,7 @@ async function canExecuteAsync(
   return isFollower(user.id);
 }
 
-async function buildVariables(
+export async function buildCommandVariables(
   msg: ChatMessage,
   customUsageCount?: number,
 ): Promise<Record<string, string | number>> {
@@ -143,7 +143,7 @@ const BUILTINS: BuiltinSpec[] = [
     cooldown: 5,
     permissions: ['everyone'],
     build: async ({ msg }) => {
-      const v = await buildVariables(msg);
+      const v = await buildCommandVariables(msg);
       return `You are level ${v.level} (${v.exp} EXP) -- ranked #${v.rank}`;
     },
   },
@@ -170,7 +170,7 @@ const BUILTINS: BuiltinSpec[] = [
     cooldown: 5,
     permissions: ['everyone'],
     build: async ({ msg }) => {
-      const v = await buildVariables(msg);
+      const v = await buildCommandVariables(msg);
       return `${v.user}: current watch streak ${v.streak}, best ${v.best_streak}`;
     },
   },
@@ -179,7 +179,7 @@ const BUILTINS: BuiltinSpec[] = [
     cooldown: 5,
     permissions: ['everyone'],
     build: async ({ msg }) => {
-      const v = await buildVariables(msg);
+      const v = await buildCommandVariables(msg);
       return `${v.user}: ${v.watch_time}h total watch time`;
     },
   },
@@ -290,7 +290,7 @@ async function runCustom(name: string, msg: ChatMessage, now: number): Promise<v
   const last = commandCooldowns.get(key) ?? 0;
   if (now < last + row.cooldown_seconds * 1000) return;
 
-  const vars = await buildVariables(msg, row.usage_count + 1);
+  const vars = await buildCommandVariables(msg, row.usage_count + 1);
   const response = interpolate(row.response, vars);
 
   commandCooldowns.set(key, now);

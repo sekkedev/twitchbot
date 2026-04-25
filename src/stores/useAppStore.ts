@@ -31,7 +31,12 @@ interface AppState {
   dismissNotice: () => void;
 }
 
-const defaultAuth: AuthStatus = { loggedIn: false, username: null, channel: null };
+const defaultAuth: AuthStatus = {
+  loggedIn: false,
+  username: null,
+  channel: null,
+  scopes: [],
+};
 const defaultBot: BotStatus = { state: 'disconnected', error: null };
 
 export const useAppStore = create<AppState>((set, get) => ({
