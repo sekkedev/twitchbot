@@ -5,6 +5,7 @@ import {
   ClockIcon,
   GearIcon,
   HomeIcon,
+  ShieldIcon,
   TerminalIcon,
   TrophyIcon,
 } from './Icons';
@@ -14,6 +15,7 @@ const NAV = [
   { to: '/commands', label: 'Commands', icon: TerminalIcon, end: false },
   { to: '/timers', label: 'Timers', icon: ClockIcon, end: false },
   { to: '/loyalty', label: 'Loyalty', icon: TrophyIcon, end: false },
+  { to: '/moderation', label: 'Moderation', icon: ShieldIcon, end: false },
   { to: '/analytics', label: 'Analytics', icon: BarChartIcon, end: false },
   { to: '/settings', label: 'Settings', icon: GearIcon, end: false },
 ] as const;

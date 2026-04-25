@@ -50,6 +50,27 @@ export interface Timer {
   updated_at: number;
 }
 
+export interface ModWarning {
+  id: number;
+  user_id: string;
+  username: string;
+  rule: string;
+  message_text: string | null;
+  action_taken: string;
+  created_at: number;
+}
+
+export interface PermittedUser {
+  user_id: string;
+  username: string;
+  created_at: number;
+}
+
+export interface ModStatus {
+  botMustBeMod: boolean;
+  missingScopes: string[];
+}
+
 export interface UserRow {
   twitch_id: string;
   username: string;
