@@ -1,5 +1,6 @@
 import { BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'node:path';
+import { isSafeExternalUrl } from '../lib/url-security';
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string };
 
@@ -66,7 +67,11 @@ export function registerWindowHandlers(): void {
       void win.loadURL(buildPopoutUrl(payload.route));
 
       win.webContents.setWindowOpenHandler(({ url: outUrl }) => {
-        shell.openExternal(outUrl);
+        if (isSafeExternalUrl(outUrl)) {
+          void shell.openExternal(outUrl);
+        } else {
+          console.warn(`[window] blocked external URL: ${outUrl}`);
+        }
         return { action: 'deny' };
       });
 

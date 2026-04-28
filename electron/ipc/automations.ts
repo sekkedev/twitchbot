@@ -18,6 +18,7 @@ import {
   getWebhookUrl,
   listWebhooks,
   saveWebhook,
+  testWebhookUrl,
 } from '../services/discord-webhooks';
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string };
@@ -113,14 +114,7 @@ export function registerAutomationHandlers(): void {
       try {
         const url = payload.url ?? getWebhookUrl(payload.key);
         if (!url) throw new Error('Webhook URL is empty.');
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: 'TwitchBot webhook test' }),
-        });
-        if (!res.ok) {
-          throw new Error(`Discord webhook failed: ${res.status} ${await res.text()}`);
-        }
+        await testWebhookUrl(url);
         return ok(null);
       } catch (err) {
         return fail(err);
