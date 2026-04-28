@@ -28,6 +28,9 @@ export const MOD_BOOLEAN_KEYS = new Set([
   'mod_repeat_enabled',
   'mod_symbols_enabled',
   'mod_vips_exempt',
+  'mod_blocked_words_enabled',
+  'mod_first_message_screening',
+  'mod_discord_webhook_enabled',
 ]);
 
 export const MOD_NUMERIC_KEYS = new Set([
@@ -42,6 +45,17 @@ export const MOD_NUMERIC_KEYS = new Set([
   'mod_escalation_2_timeout',
   'mod_escalation_3_timeout',
   'mod_escalation_4_timeout',
+]);
+
+// Per-rule escalation start tier — integer 1..4 inclusive.
+export const MOD_TIER_KEYS = new Set([
+  'mod_links_start_tier',
+  'mod_caps_start_tier',
+  'mod_emote_start_tier',
+  'mod_repeat_start_tier',
+  'mod_symbols_start_tier',
+  'mod_blocked_words_start_tier',
+  'mod_first_message_start_tier',
 ]);
 
 /**
@@ -67,6 +81,22 @@ export function normalizeSetting(key: string, value: unknown): string {
       throw new Error('mod_escalation_1 must be delete or warn.');
     }
     return s;
+  }
+  if (MOD_TIER_KEYS.has(key)) {
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < 1 || n > 4) {
+      throw new Error(`${key} must be an integer between 1 and 4.`);
+    }
+    return String(n);
+  }
+  if (key === 'mod_blocked_words') {
+    return normalizeBlockedWords(value);
+  }
+  if (key === 'mod_discord_webhook_key') {
+    if (typeof value !== 'string') {
+      throw new Error('mod_discord_webhook_key must be a string.');
+    }
+    return value.trim();
   }
   if (BOOLEAN_KEYS.has(key)) {
     if (value === true || value === 'true' || value === 1 || value === '1') return '1';
@@ -98,4 +128,35 @@ export function normalizeSetting(key: string, value: unknown): string {
     throw new Error(`${key} must be a string.`);
   }
   return value;
+}
+
+/**
+ * Accept either a JSON-string array or a real string[]. Trims, drops empties,
+ * lowercases, and dedupes. Returns the canonical JSON-stringified array so
+ * downstream code can JSON.parse without surprises.
+ */
+function normalizeBlockedWords(value: unknown): string {
+  let raw: unknown = value;
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) return '[]';
+    try {
+      raw = JSON.parse(trimmed);
+    } catch {
+      throw new Error('mod_blocked_words must be a JSON array of strings.');
+    }
+  }
+  if (!Array.isArray(raw)) {
+    throw new Error('mod_blocked_words must be an array of strings.');
+  }
+  const seen = new Set<string>();
+  const cleaned: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'string') continue;
+    const word = item.trim().toLowerCase();
+    if (!word || seen.has(word)) continue;
+    seen.add(word);
+    cleaned.push(word);
+  }
+  return JSON.stringify(cleaned);
 }

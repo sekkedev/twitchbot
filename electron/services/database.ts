@@ -42,9 +42,33 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
   mod_escalation_2_timeout: '10',
   mod_escalation_3_timeout: '600',
   mod_escalation_4_timeout: '86400',
+  mod_blocked_words: '[]',
+  mod_blocked_words_enabled: 'false',
+  mod_first_message_screening: 'false',
+  mod_links_start_tier: '1',
+  mod_caps_start_tier: '1',
+  mod_emote_start_tier: '1',
+  mod_repeat_start_tier: '1',
+  mod_symbols_start_tier: '1',
+  mod_blocked_words_start_tier: '1',
+  mod_first_message_start_tier: '1',
+  mod_discord_webhook_key: '',
+  mod_discord_webhook_enabled: 'false',
   discord_webhook_default: '',
   discord_webhook_raids: '',
   discord_webhook_follows: '',
+  discord_embed_template_moderation: JSON.stringify({
+    title: 'Moderation Action',
+    color: 0xff4444,
+    fields: [
+      { name: 'User', value: '{username}', inline: true },
+      { name: 'Rule', value: '{rule}', inline: true },
+      { name: 'Action', value: '{action}', inline: true },
+      { name: 'Message', value: '{message_snippet}', inline: false },
+    ],
+    footer: { text: 'TwitchBot moderation' },
+    timestamp: true,
+  }),
 };
 
 let db: DB | null = null;

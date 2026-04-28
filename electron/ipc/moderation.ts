@@ -3,12 +3,15 @@ import {
   addPermittedUser,
   clearWarnings,
   getModSettings,
+  getModStats,
   getModStatus,
   listPermittedUsers,
   listWarnings,
+  listWarningsPage,
   removePermittedUser,
   updateModSettings,
   type ModWarningFilters,
+  type ModWarningsPageParams,
 } from '../services/moderation-service';
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string };
@@ -87,4 +90,23 @@ export function registerModerationHandlers(): void {
       return fail(err);
     }
   });
+
+  ipcMain.handle('mod:getStats', () => {
+    try {
+      return ok(getModStats());
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle(
+    'mod:getWarningsPage',
+    (_event, params?: ModWarningsPageParams) => {
+      try {
+        return ok(listWarningsPage(params ?? {}));
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
 }
