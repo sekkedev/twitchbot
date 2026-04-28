@@ -1,20 +1,44 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useConfirm } from '../components/ConfirmProvider';
-import { PlusIcon, TrashIcon } from '../components/Icons';
+import { PlusIcon, TrashIcon, XIcon } from '../components/Icons';
 import { invoke, on, tryInvoke } from '../lib/ipc';
-import type { ModStatus, ModWarning, PermittedUser } from '../lib/types';
+import type {
+  ModStats,
+  ModStatus,
+  ModWarning,
+  ModWarningsPage,
+  PermittedUser,
+} from '../lib/types';
 import { useAppStore } from '../stores/useAppStore';
 
 type Tab = 'rules' | 'logs';
 
 const RULES = [
-  { key: 'links', title: 'Links', enabled: 'mod_links_enabled' },
-  { key: 'caps', title: 'Caps', enabled: 'mod_caps_enabled' },
-  { key: 'emote', title: 'Emotes', enabled: 'mod_emote_enabled' },
-  { key: 'repeat', title: 'Repeated', enabled: 'mod_repeat_enabled' },
-  { key: 'symbols', title: 'Symbols', enabled: 'mod_symbols_enabled' },
+  { key: 'links', title: 'Links', enabled: 'mod_links_enabled', startTier: 'mod_links_start_tier' },
+  { key: 'caps', title: 'Caps', enabled: 'mod_caps_enabled', startTier: 'mod_caps_start_tier' },
+  { key: 'emote', title: 'Emotes', enabled: 'mod_emote_enabled', startTier: 'mod_emote_start_tier' },
+  { key: 'repeat', title: 'Repeated', enabled: 'mod_repeat_enabled', startTier: 'mod_repeat_start_tier' },
+  { key: 'symbols', title: 'Symbols', enabled: 'mod_symbols_enabled', startTier: 'mod_symbols_start_tier' },
 ] as const;
+
+const TIER_OPTIONS = [
+  { label: 'Tier 1 (warn / delete)', value: '1' },
+  { label: 'Tier 2 (short timeout)', value: '2' },
+  { label: 'Tier 3 (medium timeout)', value: '3' },
+  { label: 'Tier 4 (long timeout)', value: '4' },
+];
+
+const RULE_FILTER_OPTIONS = [
+  { label: 'All rules', value: '' },
+  { label: 'Links', value: 'links' },
+  { label: 'Caps', value: 'caps' },
+  { label: 'Emotes', value: 'emotes' },
+  { label: 'Repeated', value: 'repeat' },
+  { label: 'Symbols', value: 'symbols' },
+  { label: 'Blocked words', value: 'blocked_words' },
+  { label: 'First message', value: 'first_message' },
+];
 
 const DEFAULT_SETTINGS: Record<string, string> = {
   mod_links_enabled: 'false',
@@ -32,12 +56,31 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   mod_symbols_enabled: 'false',
   mod_symbols_min_length: '10',
   mod_symbols_max_percent: '50',
+  mod_blocked_words: '[]',
+  mod_blocked_words_enabled: 'false',
+  mod_first_message_screening: 'false',
   mod_vips_exempt: 'false',
   mod_escalation_1: 'delete',
   mod_escalation_2_timeout: '10',
   mod_escalation_3_timeout: '600',
   mod_escalation_4_timeout: '86400',
+  mod_links_start_tier: '1',
+  mod_caps_start_tier: '1',
+  mod_emote_start_tier: '1',
+  mod_repeat_start_tier: '1',
+  mod_symbols_start_tier: '1',
+  mod_blocked_words_start_tier: '1',
+  mod_first_message_start_tier: '1',
+  mod_discord_webhook_key: '',
+  mod_discord_webhook_enabled: 'false',
 };
+
+const PAGE_SIZE = 25;
+
+interface WebhookEntry {
+  key: string;
+  url: string;
+}
 
 export function Moderation() {
   const confirm = useConfirm();
@@ -46,8 +89,6 @@ export function Moderation() {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlTab: Tab = searchParams.get('tab') === 'logs' ? 'logs' : 'rules';
   const [tab, setTabState] = useState<Tab>(urlTab);
-  // Sync tab state if the URL changes (e.g. Alt+9 nav into /moderation?tab=logs
-  // while already mounted on /moderation).
   useEffect(() => {
     setTabState(urlTab);
   }, [urlTab]);
@@ -61,19 +102,29 @@ export function Moderation() {
     },
     [searchParams, setSearchParams],
   );
+
   const [settings, setSettings] = useState<Record<string, string>>(DEFAULT_SETTINGS);
-  const [warnings, setWarnings] = useState<ModWarning[]>([]);
+  const [stats, setStats] = useState<ModStats | null>(null);
   const [permitted, setPermitted] = useState<PermittedUser[]>([]);
+  const [webhooks, setWebhooks] = useState<WebhookEntry[]>([]);
   const [status, setStatus] = useState<ModStatus>({
     botMustBeMod: false,
     missingScopes: [],
   });
-  const [ruleFilter, setRuleFilter] = useState('');
-  const [search, setSearch] = useState('');
   const [permitUserId, setPermitUserId] = useState('');
   const [permitUsername, setPermitUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  // Logs tab state
+  const [page, setPage] = useState(1);
+  const [ruleFilter, setRuleFilter] = useState('');
+  const [logPage, setLogPage] = useState<ModWarningsPage>({
+    warnings: [],
+    total: 0,
+    page: 1,
+    pageSize: PAGE_SIZE,
+  });
 
   const missingScopes = useMemo(
     () =>
@@ -92,15 +143,21 @@ export function Moderation() {
     else setError(res.error);
   }, []);
 
-  const loadWarnings = useCallback(async () => {
-    const res = await tryInvoke<ModWarning[]>('mod:getWarnings', {
-      rule: ruleFilter || undefined,
-      search: search || undefined,
-      limit: 200,
+  const loadStats = useCallback(async () => {
+    const res = await tryInvoke<ModStats>('mod:getStats');
+    if (res.success) setStats(res.data);
+  }, []);
+
+  const loadLogPage = useCallback(async () => {
+    const res = await tryInvoke<ModWarningsPage>('mod:getWarningsPage', {
+      page,
+      pageSize: PAGE_SIZE,
+      ruleFilter: ruleFilter || undefined,
+      sortOrder: 'desc',
     });
-    if (res.success) setWarnings(res.data);
+    if (res.success) setLogPage(res.data);
     else setError(res.error);
-  }, [ruleFilter, search]);
+  }, [page, ruleFilter]);
 
   const loadPermitted = useCallback(async () => {
     const res = await tryInvoke<PermittedUser[]>('mod:getPermittedUsers');
@@ -113,14 +170,21 @@ export function Moderation() {
     if (res.success) setStatus(res.data);
   }, []);
 
+  const loadWebhooks = useCallback(async () => {
+    const res = await tryInvoke<WebhookEntry[]>('discord-webhooks:list');
+    if (res.success) setWebhooks(res.data);
+  }, []);
+
   useEffect(() => {
     void loadSettings();
-    void loadWarnings();
+    void loadStats();
     void loadPermitted();
     void loadStatus();
+    void loadWebhooks();
     const offStatus = on<ModStatus>('mod:status', setStatus);
     const offWarnings = on('mod:warnings-updated', () => {
-      void loadWarnings();
+      void loadStats();
+      void loadLogPage();
     });
     const offAuth = on('auth:reauth-required', () => {
       void loadStatus();
@@ -130,21 +194,39 @@ export function Moderation() {
       offWarnings();
       offAuth();
     };
-  }, [loadPermitted, loadSettings, loadStatus, loadWarnings]);
+    // loadLogPage purposely excluded — first-mount load happens in the effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadPermitted, loadSettings, loadStats, loadStatus, loadWebhooks]);
 
   useEffect(() => {
-    void loadWarnings();
-  }, [loadWarnings]);
+    void loadLogPage();
+  }, [loadLogPage]);
 
-  const updateLocal = (key: string, value: string | boolean | number) => {
-    setSettings((prev) => ({ ...prev, [key]: String(value) }));
+  // Filter changes should reset to page 1.
+  useEffect(() => {
+    setPage(1);
+  }, [ruleFilter]);
+
+  const updateLocal = (key: string, value: string | boolean | number | string[]) => {
+    setSettings((prev) => ({
+      ...prev,
+      [key]: Array.isArray(value) ? JSON.stringify(value) : String(value),
+    }));
   };
 
   const saveSettings = async () => {
     setError(null);
     setSaved(false);
     try {
-      const res = await invoke<Record<string, string>>('mod:updateSettings', settings);
+      // mod_blocked_words is stored as a JSON string in settings; pass it
+      // as a real array so the normalizer's array branch trims and dedupes.
+      const payload: Record<string, unknown> = { ...settings };
+      try {
+        payload.mod_blocked_words = JSON.parse(settings.mod_blocked_words || '[]');
+      } catch {
+        payload.mod_blocked_words = [];
+      }
+      const res = await invoke<Record<string, string>>('mod:updateSettings', payload);
       setSettings({ ...DEFAULT_SETTINGS, ...res });
       setSaved(true);
       window.setTimeout(() => setSaved(false), 1400);
@@ -163,12 +245,14 @@ export function Moderation() {
     });
     if (!ok) return;
     await invoke('mod:clearWarnings');
-    await loadWarnings();
+    await loadLogPage();
+    await loadStats();
   };
 
   const clearForUser = async (warning: ModWarning) => {
     await invoke('mod:clearWarnings', { user_id: warning.user_id });
-    await loadWarnings();
+    await loadLogPage();
+    await loadStats();
   };
 
   const addPermit = async () => {
@@ -219,6 +303,8 @@ export function Moderation() {
         </div>
       </div>
 
+      <StatsStrip stats={stats} />
+
       {missingScopes.length > 0 && (
         <Banner tone="warn">
           <span>Moderation requires additional permissions.</span>
@@ -245,19 +331,20 @@ export function Moderation() {
         <RulesTab
           settings={settings}
           saved={saved}
+          webhooks={webhooks}
           updateLocal={updateLocal}
           saveSettings={saveSettings}
         />
       ) : (
         <LogsTab
-          warnings={warnings}
+          logPage={logPage}
           permitted={permitted}
           ruleFilter={ruleFilter}
-          search={search}
+          page={page}
           permitUserId={permitUserId}
           permitUsername={permitUsername}
           setRuleFilter={setRuleFilter}
-          setSearch={setSearch}
+          setPage={setPage}
           setPermitUserId={setPermitUserId}
           setPermitUsername={setPermitUsername}
           clearAll={clearAll}
@@ -270,30 +357,116 @@ export function Moderation() {
   );
 }
 
+// ── Stats strip ────────────────────────────────────────────────────────────
+
+function StatsStrip({ stats }: { stats: ModStats | null }) {
+  const today = stats?.byTimeframe.today ?? 0;
+  const last7 = stats?.byTimeframe.last7Days ?? 0;
+  const last30 = stats?.byTimeframe.last30Days ?? 0;
+  const topRules = stats?.byRule.slice(0, 3) ?? [];
+  const topUser = stats?.topUsers[0];
+
+  return (
+    <div className="grid grid-cols-[140px_140px_140px_1fr_240px] gap-2">
+      <StatCell label="Today" value={today} />
+      <StatCell label="Last 7d" value={last7} />
+      <StatCell label="Last 30d" value={last30} />
+      <div className="border border-border bg-bg-panel p-3">
+        <div className="font-mono text-[10px] uppercase tracking-wider text-text-dim">
+          Top rules
+        </div>
+        {topRules.length === 0 ? (
+          <div className="mt-1 text-xs text-text-dim">No warnings yet.</div>
+        ) : (
+          <div className="mt-1 grid grid-cols-3 gap-2">
+            {topRules.map((entry) => (
+              <div key={entry.rule} className="min-w-0">
+                <div className="truncate text-[11px] text-text">{entry.rule}</div>
+                <div className="font-mono text-xs text-text-muted">{entry.count}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="border border-border bg-bg-panel p-3">
+        <div className="font-mono text-[10px] uppercase tracking-wider text-text-dim">
+          Top warned (30d)
+        </div>
+        {topUser ? (
+          <div className="mt-1 flex items-baseline justify-between gap-2">
+            <div className="truncate text-sm text-text">{topUser.username}</div>
+            <div className="font-mono text-xs text-text-muted">
+              {topUser.count} warnings
+            </div>
+          </div>
+        ) : (
+          <div className="mt-1 text-xs text-text-dim">No warnings yet.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatCell({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="border border-border bg-bg-panel p-3">
+      <div className="font-mono text-[10px] uppercase tracking-wider text-text-dim">
+        {label}
+      </div>
+      <div className="mt-1 font-mono text-2xl text-text">{value}</div>
+    </div>
+  );
+}
+
+// ── Rules tab ──────────────────────────────────────────────────────────────
+
 function RulesTab({
   settings,
   saved,
+  webhooks,
   updateLocal,
   saveSettings,
 }: {
   settings: Record<string, string>;
   saved: boolean;
-  updateLocal: (key: string, value: string | boolean | number) => void;
+  webhooks: WebhookEntry[];
+  updateLocal: (key: string, value: string | boolean | number | string[]) => void;
   saveSettings: () => Promise<void>;
 }) {
+  const blockedWords = useMemo(() => {
+    try {
+      const parsed = JSON.parse(settings.mod_blocked_words || '[]');
+      return Array.isArray(parsed) ? (parsed as string[]) : [];
+    } catch {
+      return [];
+    }
+  }, [settings.mod_blocked_words]);
+
+  const setBlockedWords = (words: string[]) => {
+    updateLocal('mod_blocked_words', words);
+  };
+
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="grid grid-cols-2 gap-4">
         {RULES.map((rule) => (
           <section key={rule.key} className="border border-border bg-bg-panel">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
               <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-text">
                 {rule.title}
               </h3>
-              <Toggle
-                value={settings[rule.enabled] === 'true'}
-                onChange={(value) => updateLocal(rule.enabled, value)}
-              />
+              <div className="flex items-center gap-3">
+                <CompactSelect
+                  label="Start"
+                  value={settings[rule.startTier] ?? '1'}
+                  onChange={(value) => updateLocal(rule.startTier, value)}
+                  options={TIER_OPTIONS}
+                />
+                <Toggle
+                  value={settings[rule.enabled] === 'true'}
+                  onChange={(value) => updateLocal(rule.enabled, value)}
+                />
+              </div>
             </div>
             <div className="space-y-3 p-4">
               {rule.key === 'links' && (
@@ -372,6 +545,22 @@ function RulesTab({
             </div>
           </section>
         ))}
+
+        <BlockedWordsCard
+          enabled={settings.mod_blocked_words_enabled === 'true'}
+          words={blockedWords}
+          startTier={settings.mod_blocked_words_start_tier ?? '1'}
+          setEnabled={(value) => updateLocal('mod_blocked_words_enabled', value)}
+          setStartTier={(value) => updateLocal('mod_blocked_words_start_tier', value)}
+          setWords={setBlockedWords}
+        />
+
+        <FirstMessageCard
+          enabled={settings.mod_first_message_screening === 'true'}
+          startTier={settings.mod_first_message_start_tier ?? '1'}
+          setEnabled={(value) => updateLocal('mod_first_message_screening', value)}
+          setStartTier={(value) => updateLocal('mod_first_message_start_tier', value)}
+        />
       </div>
 
       <section className="mt-4 border border-border bg-bg-panel">
@@ -382,7 +571,7 @@ function RulesTab({
         </div>
         <div className="grid grid-cols-4 gap-4 p-4">
           <SelectField
-            label="First offense"
+            label="Tier 1 default"
             value={settings.mod_escalation_1}
             onChange={(value) => updateLocal('mod_escalation_1', value)}
             options={[
@@ -391,57 +580,247 @@ function RulesTab({
             ]}
           />
           <NumberField
-            label="Second timeout"
+            label="Tier 2 timeout (s)"
             value={settings.mod_escalation_2_timeout}
             onChange={(value) => updateLocal('mod_escalation_2_timeout', value)}
           />
           <NumberField
-            label="Third timeout"
+            label="Tier 3 timeout (s)"
             value={settings.mod_escalation_3_timeout}
             onChange={(value) => updateLocal('mod_escalation_3_timeout', value)}
           />
           <NumberField
-            label="Fourth timeout"
+            label="Tier 4 timeout (s)"
             value={settings.mod_escalation_4_timeout}
             onChange={(value) => updateLocal('mod_escalation_4_timeout', value)}
           />
         </div>
-        <div className="flex items-center justify-between border-t border-border px-4 py-3">
+        <div className="border-t border-border px-4 py-3">
           <CheckboxField
             label="VIPs exempt"
             value={settings.mod_vips_exempt === 'true'}
             onChange={(value) => updateLocal('mod_vips_exempt', value)}
           />
-          <div className="flex items-center gap-3">
-            {saved && (
-              <span className="font-mono text-[10px] uppercase tracking-wider text-live">
-                saved
-              </span>
-            )}
-            <button
-              onClick={() => {
-                void saveSettings();
-              }}
-              className="border border-accent bg-accent/10 px-3 py-1.5 text-xs uppercase tracking-wider text-accent hover:bg-accent/20"
-            >
-              Save
-            </button>
-          </div>
         </div>
       </section>
+
+      <DiscordAlertsSection
+        enabled={settings.mod_discord_webhook_enabled === 'true'}
+        webhookKey={settings.mod_discord_webhook_key ?? ''}
+        webhooks={webhooks}
+        setEnabled={(value) => updateLocal('mod_discord_webhook_enabled', value)}
+        setWebhookKey={(value) => updateLocal('mod_discord_webhook_key', value)}
+      />
+
+      <div className="mt-4 flex items-center justify-end gap-3">
+        {saved && (
+          <span className="font-mono text-[10px] uppercase tracking-wider text-live">
+            saved
+          </span>
+        )}
+        <button
+          onClick={() => {
+            void saveSettings();
+          }}
+          className="border border-accent bg-accent/10 px-3 py-1.5 text-xs uppercase tracking-wider text-accent hover:bg-accent/20"
+        >
+          Save
+        </button>
+      </div>
     </div>
   );
 }
 
+// ── Cards ──────────────────────────────────────────────────────────────────
+
+function BlockedWordsCard({
+  enabled,
+  words,
+  startTier,
+  setEnabled,
+  setStartTier,
+  setWords,
+}: {
+  enabled: boolean;
+  words: string[];
+  startTier: string;
+  setEnabled: (value: boolean) => void;
+  setStartTier: (value: string) => void;
+  setWords: (words: string[]) => void;
+}) {
+  const [draft, setDraft] = useState('');
+
+  const addWord = () => {
+    const cleaned = draft.trim().toLowerCase();
+    if (!cleaned || words.includes(cleaned)) {
+      setDraft('');
+      return;
+    }
+    setWords([...words, cleaned]);
+    setDraft('');
+  };
+
+  const removeWord = (word: string) => {
+    setWords(words.filter((entry) => entry !== word));
+  };
+
+  return (
+    <section className="col-span-2 border border-border bg-bg-panel">
+      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-text">
+          Blocked Words
+        </h3>
+        <div className="flex items-center gap-3">
+          <CompactSelect
+            label="Start"
+            value={startTier}
+            onChange={setStartTier}
+            options={TIER_OPTIONS}
+          />
+          <Toggle value={enabled} onChange={setEnabled} />
+        </div>
+      </div>
+      <div className="space-y-3 p-4">
+        <div className="flex gap-2">
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addWord();
+              }
+            }}
+            placeholder="Type a word, press Enter"
+            className="min-w-0 flex-1 border border-border bg-bg px-2.5 py-1.5 text-xs text-text outline-none focus:border-accent"
+          />
+          <button
+            onClick={addWord}
+            disabled={!draft.trim()}
+            className="border border-accent bg-accent/10 px-2 text-accent hover:bg-accent/20 disabled:opacity-50"
+            aria-label="Add blocked word"
+          >
+            <PlusIcon width={14} height={14} />
+          </button>
+        </div>
+        {words.length === 0 ? (
+          <div className="text-[11px] text-text-dim">
+            No blocked words. Match is case-insensitive substring.
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {words.map((word) => (
+              <span
+                key={word}
+                className="flex items-center gap-1 border border-border bg-bg px-2 py-1 font-mono text-[11px] text-text"
+              >
+                {word}
+                <button
+                  onClick={() => removeWord(word)}
+                  className="text-text-dim hover:text-offline"
+                  aria-label={`Remove ${word}`}
+                >
+                  <XIcon width={11} height={11} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function FirstMessageCard({
+  enabled,
+  startTier,
+  setEnabled,
+  setStartTier,
+}: {
+  enabled: boolean;
+  startTier: string;
+  setEnabled: (value: boolean) => void;
+  setStartTier: (value: string) => void;
+}) {
+  return (
+    <section className="col-span-2 border border-border bg-bg-panel">
+      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-text">
+          First Message Screening
+        </h3>
+        <div className="flex items-center gap-3">
+          <CompactSelect
+            label="Start"
+            value={startTier}
+            onChange={setStartTier}
+            options={TIER_OPTIONS}
+          />
+          <Toggle value={enabled} onChange={setEnabled} />
+        </div>
+      </div>
+      <div className="p-4 text-xs text-text-muted">
+        Auto-deletes the first message from any user with no prior chat history.
+        Subscribers are exempt. Useful for catching spam-bot raids.
+      </div>
+    </section>
+  );
+}
+
+function DiscordAlertsSection({
+  enabled,
+  webhookKey,
+  webhooks,
+  setEnabled,
+  setWebhookKey,
+}: {
+  enabled: boolean;
+  webhookKey: string;
+  webhooks: WebhookEntry[];
+  setEnabled: (value: boolean) => void;
+  setWebhookKey: (value: string) => void;
+}) {
+  return (
+    <section className="mt-4 border border-border bg-bg-panel">
+      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-text">
+          Discord Alerts
+        </h3>
+        <Toggle value={enabled} onChange={setEnabled} />
+      </div>
+      <div className="grid grid-cols-2 gap-4 p-4">
+        <SelectField
+          label="Webhook"
+          value={webhookKey}
+          onChange={setWebhookKey}
+          options={[
+            { label: '(none)', value: '' },
+            ...webhooks.map((w) => ({ label: w.key, value: w.key })),
+          ]}
+        />
+        <div className="text-[11px] text-text-muted">
+          Sends an embed using the <span className="font-mono text-text">moderation</span>{' '}
+          template (editable in Webhooks). Vars resolved per action:{' '}
+          <span className="font-mono">{'{username}'}</span>,{' '}
+          <span className="font-mono">{'{rule}'}</span>,{' '}
+          <span className="font-mono">{'{action}'}</span>,{' '}
+          <span className="font-mono">{'{message_snippet}'}</span>.
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ── Logs tab ───────────────────────────────────────────────────────────────
+
 function LogsTab({
-  warnings,
+  logPage,
   permitted,
   ruleFilter,
-  search,
+  page,
   permitUserId,
   permitUsername,
   setRuleFilter,
-  setSearch,
+  setPage,
   setPermitUserId,
   setPermitUsername,
   clearAll,
@@ -449,14 +828,14 @@ function LogsTab({
   addPermit,
   removePermit,
 }: {
-  warnings: ModWarning[];
+  logPage: ModWarningsPage;
   permitted: PermittedUser[];
   ruleFilter: string;
-  search: string;
+  page: number;
   permitUserId: string;
   permitUsername: string;
   setRuleFilter: (value: string) => void;
-  setSearch: (value: string) => void;
+  setPage: (next: number | ((prev: number) => number)) => void;
   setPermitUserId: (value: string) => void;
   setPermitUsername: (value: string) => void;
   clearAll: () => Promise<void>;
@@ -464,30 +843,25 @@ function LogsTab({
   addPermit: () => Promise<void>;
   removePermit: (userId: string) => Promise<void>;
 }) {
+  const totalPages = Math.max(1, Math.ceil(logPage.total / logPage.pageSize));
+  const fromRow = logPage.total === 0 ? 0 : (page - 1) * logPage.pageSize + 1;
+  const toRow = Math.min(page * logPage.pageSize, logPage.total);
+
   return (
     <div className="grid min-h-0 flex-1 grid-cols-[1fr_320px] gap-4">
-      <section className="min-h-0 overflow-hidden border border-border bg-bg-panel">
+      <section className="flex min-h-0 flex-col overflow-hidden border border-border bg-bg-panel">
         <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-          <div className="flex gap-2">
-            <select
-              value={ruleFilter}
-              onChange={(e) => setRuleFilter(e.target.value)}
-              className="border border-border bg-bg px-2 py-1.5 text-xs text-text outline-none focus:border-accent"
-            >
-              <option value="">All rules</option>
-              <option value="links">Links</option>
-              <option value="caps">Caps</option>
-              <option value="emotes">Emotes</option>
-              <option value="repeat">Repeated</option>
-              <option value="symbols">Symbols</option>
-            </select>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search username"
-              className="w-44 border border-border bg-bg px-2 py-1.5 text-xs text-text outline-none focus:border-accent"
-            />
-          </div>
+          <select
+            value={ruleFilter}
+            onChange={(e) => setRuleFilter(e.target.value)}
+            className="border border-border bg-bg px-2 py-1.5 text-xs text-text outline-none focus:border-accent"
+          >
+            {RULE_FILTER_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
           <button
             onClick={() => {
               void clearAll();
@@ -497,7 +871,7 @@ function LogsTab({
             Clear all
           </button>
         </div>
-        <div className="max-h-full overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-bg-elev text-[10px] uppercase tracking-wider text-text-dim">
               <tr>
@@ -510,7 +884,7 @@ function LogsTab({
               </tr>
             </thead>
             <tbody>
-              {warnings.map((warning) => (
+              {logPage.warnings.map((warning) => (
                 <tr key={warning.id} className="border-t border-border">
                   <td className="px-3 py-2 font-mono text-[11px] text-text-muted">
                     {new Date(warning.created_at * 1000).toLocaleString()}
@@ -537,7 +911,7 @@ function LogsTab({
                   </td>
                 </tr>
               ))}
-              {warnings.length === 0 && (
+              {logPage.warnings.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-10 text-center text-sm text-text-dim">
                     No moderation logs.
@@ -546,6 +920,30 @@ function LogsTab({
               )}
             </tbody>
           </table>
+        </div>
+        <div className="flex items-center justify-between border-t border-border bg-bg-elev px-4 py-2 font-mono text-[11px] text-text-muted">
+          <span>
+            {fromRow}–{toRow} of {logPage.total}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="border border-border bg-bg px-2 py-1 text-[10px] uppercase tracking-wider text-text-muted hover:bg-bg-hover disabled:opacity-40"
+            >
+              Prev
+            </button>
+            <span className="px-1">
+              {page} / {totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="border border-border bg-bg px-2 py-1 text-[10px] uppercase tracking-wider text-text-muted hover:bg-bg-hover disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </section>
 
@@ -608,6 +1006,8 @@ function LogsTab({
     </div>
   );
 }
+
+// ── Primitives ─────────────────────────────────────────────────────────────
 
 function Banner({
   tone,
@@ -716,6 +1116,35 @@ function SelectField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full border border-border bg-bg px-2.5 py-1.5 text-xs text-text outline-none focus:border-accent"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function CompactSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ label: string; value: string }>;
+}) {
+  return (
+    <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-text-dim">
+      {label}
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="border border-border bg-bg px-1.5 py-0.5 text-[11px] normal-case text-text-muted outline-none focus:border-accent"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>

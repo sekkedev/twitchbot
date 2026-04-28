@@ -1,6 +1,11 @@
 import { broadcast } from '../ipc/broadcast';
 import { interpolate } from '../lib/command-logic';
 import { getDatabase } from './database';
+import {
+  getEmbedTemplate,
+  sendWebhook,
+  type DiscordEmbed,
+} from './discord-webhooks';
 import { getSetting, updateSetting } from './settings-service';
 import { getCurrentTokens, hasScopes, MODERATION_SCOPES } from './twitch-auth';
 import type { ChatMessage } from './twitch-chat';
@@ -11,7 +16,14 @@ import {
   timeoutUser,
 } from './twitch-helix';
 
-export type ModRule = 'links' | 'caps' | 'emotes' | 'repeat' | 'symbols';
+export type ModRule =
+  | 'links'
+  | 'caps'
+  | 'emotes'
+  | 'repeat'
+  | 'symbols'
+  | 'blocked_words'
+  | 'first_message';
 
 export interface ModWarning {
   id: number;
@@ -59,11 +71,17 @@ interface ModSettings {
   symbolsEnabled: boolean;
   symbolsMinLength: number;
   symbolsMaxPercent: number;
+  blockedWordsEnabled: boolean;
+  blockedWords: string[];
+  firstMessageScreening: boolean;
   vipsExempt: boolean;
   escalation1: 'delete' | 'warn';
   escalation2Timeout: number;
   escalation3Timeout: number;
   escalation4Timeout: number;
+  startTierByRule: Record<ModRule, number>;
+  discordWebhookEnabled: boolean;
+  discordWebhookKey: string;
 }
 
 interface Violation {
@@ -86,11 +104,23 @@ const MOD_KEYS = [
   'mod_symbols_enabled',
   'mod_symbols_min_length',
   'mod_symbols_max_percent',
+  'mod_blocked_words',
+  'mod_blocked_words_enabled',
+  'mod_first_message_screening',
   'mod_vips_exempt',
   'mod_escalation_1',
   'mod_escalation_2_timeout',
   'mod_escalation_3_timeout',
   'mod_escalation_4_timeout',
+  'mod_links_start_tier',
+  'mod_caps_start_tier',
+  'mod_emote_start_tier',
+  'mod_repeat_start_tier',
+  'mod_symbols_start_tier',
+  'mod_blocked_words_start_tier',
+  'mod_first_message_start_tier',
+  'mod_discord_webhook_key',
+  'mod_discord_webhook_enabled',
 ] as const;
 
 const URL_RE =
@@ -166,6 +196,115 @@ export function clearWarnings(userId?: string): { affected: number } {
   return { affected: info.changes };
 }
 
+export interface ModWarningsPageParams {
+  page?: number;
+  pageSize?: number;
+  ruleFilter?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+export interface ModWarningsPage {
+  warnings: ModWarning[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export function listWarningsPage(params: ModWarningsPageParams = {}): ModWarningsPage {
+  const pageSize = clampInt(params.pageSize ?? 25, 1, 200);
+  const page = Math.max(1, Math.floor(params.page ?? 1));
+  const order = params.sortOrder === 'asc' ? 'ASC' : 'DESC';
+
+  const where: string[] = [];
+  const args: unknown[] = [];
+  if (params.ruleFilter) {
+    where.push('rule = ?');
+    args.push(params.ruleFilter);
+  }
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+  const total = (
+    getDatabase()
+      .prepare(`SELECT COUNT(*) AS n FROM mod_warnings ${whereSql}`)
+      .get(...args) as { n: number }
+  ).n;
+
+  const offset = (page - 1) * pageSize;
+  const warnings = getDatabase()
+    .prepare(
+      `SELECT * FROM mod_warnings ${whereSql}
+       ORDER BY created_at ${order}, id ${order}
+       LIMIT ? OFFSET ?`,
+    )
+    .all(...args, pageSize, offset) as ModWarning[];
+
+  return { warnings, total, page, pageSize };
+}
+
+export interface ModStats {
+  byTimeframe: { today: number; last7Days: number; last30Days: number };
+  byRule: Array<{ rule: string; count: number }>;
+  byAction: Array<{ action: string; count: number }>;
+  topUsers: Array<{ user_id: string; username: string; count: number }>;
+}
+
+export function getModStats(): ModStats {
+  const db = getDatabase();
+  const now = Math.floor(Date.now() / 1000);
+  const dayAgo = now - 24 * 60 * 60;
+  const weekAgo = now - 7 * 24 * 60 * 60;
+  const monthAgo = now - 30 * 24 * 60 * 60;
+
+  const countSince = (since: number): number =>
+    (
+      db
+        .prepare('SELECT COUNT(*) AS n FROM mod_warnings WHERE created_at >= ?')
+        .get(since) as { n: number }
+    ).n;
+
+  const byRule = db
+    .prepare(
+      `SELECT rule, COUNT(*) AS count FROM mod_warnings
+       GROUP BY rule
+       ORDER BY count DESC`,
+    )
+    .all() as Array<{ rule: string; count: number }>;
+
+  const byAction = db
+    .prepare(
+      `SELECT action_taken AS action, COUNT(*) AS count FROM mod_warnings
+       GROUP BY action_taken
+       ORDER BY count DESC`,
+    )
+    .all() as Array<{ action: string; count: number }>;
+
+  const topUsers = db
+    .prepare(
+      `SELECT user_id, username, COUNT(*) AS count FROM mod_warnings
+       WHERE created_at >= ?
+       GROUP BY user_id
+       ORDER BY count DESC
+       LIMIT 5`,
+    )
+    .all(monthAgo) as Array<{ user_id: string; username: string; count: number }>;
+
+  return {
+    byTimeframe: {
+      today: countSince(dayAgo),
+      last7Days: countSince(weekAgo),
+      last30Days: countSince(monthAgo),
+    },
+    byRule,
+    byAction,
+    topUsers,
+  };
+}
+
+function clampInt(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(max, Math.max(min, Math.floor(value)));
+}
+
 export function listPermittedUsers(): PermittedUser[] {
   return getDatabase()
     .prepare('SELECT * FROM mod_permitted_users ORDER BY username COLLATE NOCASE')
@@ -216,6 +355,10 @@ function loadSettings(): ModSettings {
     const value = Number(getSetting(key, String(fallback)));
     return Number.isFinite(value) ? value : fallback;
   };
+  const tier = (key: string) => {
+    const n = Math.floor(num(key, 1));
+    return Math.min(4, Math.max(1, n));
+  };
   return {
     linksEnabled: bool('mod_links_enabled', false),
     linksWhitelist: parseWhitelist(getSetting('mod_links_whitelist', '') ?? ''),
@@ -232,13 +375,40 @@ function loadSettings(): ModSettings {
     symbolsEnabled: bool('mod_symbols_enabled', false),
     symbolsMinLength: num('mod_symbols_min_length', 10),
     symbolsMaxPercent: num('mod_symbols_max_percent', 50),
+    blockedWordsEnabled: bool('mod_blocked_words_enabled', false),
+    blockedWords: parseBlockedWords(getSetting('mod_blocked_words', '[]') ?? '[]'),
+    firstMessageScreening: bool('mod_first_message_screening', false),
     vipsExempt: bool('mod_vips_exempt', false),
     escalation1:
       getSetting('mod_escalation_1', 'delete') === 'warn' ? 'warn' : 'delete',
     escalation2Timeout: num('mod_escalation_2_timeout', 10),
     escalation3Timeout: num('mod_escalation_3_timeout', 600),
     escalation4Timeout: num('mod_escalation_4_timeout', 86400),
+    startTierByRule: {
+      links: tier('mod_links_start_tier'),
+      caps: tier('mod_caps_start_tier'),
+      emotes: tier('mod_emote_start_tier'),
+      repeat: tier('mod_repeat_start_tier'),
+      symbols: tier('mod_symbols_start_tier'),
+      blocked_words: tier('mod_blocked_words_start_tier'),
+      first_message: tier('mod_first_message_start_tier'),
+    },
+    discordWebhookEnabled: bool('mod_discord_webhook_enabled', false),
+    discordWebhookKey: getSetting('mod_discord_webhook_key', '') ?? '',
   };
+}
+
+function parseBlockedWords(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item): item is string => typeof item === 'string')
+      .map((item) => item.toLowerCase())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
 async function handlePermitCommand(
@@ -295,6 +465,19 @@ function isTemporaryPermitted(msg: ChatMessage): boolean {
 function findViolation(msg: ChatMessage, settings: ModSettings): Violation | null {
   trackRepeatMessage(msg, settings);
 
+  if (
+    settings.firstMessageScreening &&
+    !msg.user.roles.subscriber &&
+    isFirstMessageUser(msg.user.id)
+  ) {
+    return { rule: 'first_message' };
+  }
+  if (
+    settings.blockedWordsEnabled &&
+    hasBlockedWord(msg.message, settings.blockedWords)
+  ) {
+    return { rule: 'blocked_words' };
+  }
   if (settings.linksEnabled && hasBlockedLink(msg.message, settings.linksWhitelist)) {
     return { rule: 'links' };
   }
@@ -311,6 +494,21 @@ function findViolation(msg: ChatMessage, settings: ModSettings): Violation | nul
     return { rule: 'symbols' };
   }
   return null;
+}
+
+function hasBlockedWord(message: string, words: string[]): boolean {
+  if (words.length === 0) return false;
+  const haystack = message.toLowerCase();
+  return words.some((word) => word.length > 0 && haystack.includes(word));
+}
+
+function isFirstMessageUser(userId: string): boolean {
+  const row = getDatabase()
+    .prepare('SELECT messages_sent FROM users WHERE twitch_id = ?')
+    .get(userId) as { messages_sent: number } | undefined;
+  // The chat pipeline upserts the user row before moderation runs, so a
+  // genuinely-new user shows messages_sent === 0.
+  return !row || row.messages_sent === 0;
 }
 
 function parseWhitelist(raw: string): string[] {
@@ -390,26 +588,79 @@ async function applyEscalation(
   violation: Violation,
   settings: ModSettings,
 ): Promise<void> {
-  const count = (offenseCounts.get(msg.user.id) ?? 0) + 1;
-  offenseCounts.set(msg.user.id, count);
+  const rawCount = (offenseCounts.get(msg.user.id) ?? 0) + 1;
+  offenseCounts.set(msg.user.id, rawCount);
+
+  // Per-rule override: a start_tier of N means the first offense lands on
+  // tier N. Cap at 4 (the most severe tier).
+  const offset = settings.startTierByRule[violation.rule] - 1;
+  const tier = Math.min(4, rawCount + offset);
 
   const actions: string[] = [];
-  if (count === 1 && settings.escalation1 === 'warn') {
+  if (tier === 1 && settings.escalation1 === 'warn') {
     actions.push('warn');
   } else {
     actions.push(await tryDeleteMessage(msg));
   }
 
-  if (count === 2) {
+  if (tier === 2) {
     actions.push(await tryTimeout(msg, settings.escalation2Timeout, violation.rule));
-  } else if (count === 3) {
+  } else if (tier === 3) {
     actions.push(await tryTimeout(msg, settings.escalation3Timeout, violation.rule));
-  } else if (count >= 4) {
+  } else if (tier >= 4) {
     actions.push(await tryTimeout(msg, settings.escalation4Timeout, violation.rule));
   }
 
-  logWarning(msg, violation.rule, actions.join('+'));
+  const actionTaken = actions.join('+');
+  logWarning(msg, violation.rule, actionTaken);
+  if (settings.discordWebhookEnabled && settings.discordWebhookKey) {
+    void dispatchDiscordAlert(msg, violation.rule, actionTaken, settings).catch(
+      (err) => console.error('[mod] discord alert failed:', err),
+    );
+  }
 }
+
+async function dispatchDiscordAlert(
+  msg: ChatMessage,
+  rule: ModRule,
+  action: string,
+  settings: ModSettings,
+): Promise<void> {
+  const embed = getEmbedTemplate('moderation')?.embed ?? FALLBACK_MOD_EMBED;
+  const snippet = truncate(msg.message, 100);
+  await sendWebhook(
+    settings.discordWebhookKey,
+    { embed },
+    {
+      username: msg.user.displayName,
+      user_id: msg.user.id,
+      rule,
+      action,
+      message: msg.message,
+      message_snippet: snippet,
+      event: 'moderation',
+      timestamp: new Date().toISOString(),
+    },
+  );
+}
+
+function truncate(text: string, max: number): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 1)}…`;
+}
+
+const FALLBACK_MOD_EMBED: DiscordEmbed = {
+  title: 'Moderation Action',
+  color: 0xff4444,
+  fields: [
+    { name: 'User', value: '{username}', inline: true },
+    { name: 'Rule', value: '{rule}', inline: true },
+    { name: 'Action', value: '{action}', inline: true },
+    { name: 'Message', value: '{message_snippet}', inline: false },
+  ],
+  footer: { text: 'TwitchBot moderation' },
+  timestamp: true,
+};
 
 async function tryDeleteMessage(msg: ChatMessage): Promise<string> {
   const tokens = getCurrentTokens();

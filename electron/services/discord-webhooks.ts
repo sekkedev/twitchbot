@@ -97,6 +97,13 @@ export function listEmbedTemplates(): EmbedTemplate[] {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+export function getEmbedTemplate(name: string): EmbedTemplate | null {
+  const normalized = normalizeTemplateName(name);
+  const raw = getSetting(`${TEMPLATE_PREFIX}${normalized}`, '');
+  if (!raw) return null;
+  return { name: normalized, embed: parseEmbed(raw) };
+}
+
 export function saveEmbedTemplate(name: string, embed: DiscordEmbed): EmbedTemplate {
   const normalized = normalizeTemplateName(name);
   const sanitized = sanitizeEmbed(embed);

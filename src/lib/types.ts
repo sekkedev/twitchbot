@@ -71,6 +71,20 @@ export interface ModStatus {
   missingScopes: string[];
 }
 
+export interface ModStats {
+  byTimeframe: { today: number; last7Days: number; last30Days: number };
+  byRule: Array<{ rule: string; count: number }>;
+  byAction: Array<{ action: string; count: number }>;
+  topUsers: Array<{ user_id: string; username: string; count: number }>;
+}
+
+export interface ModWarningsPage {
+  warnings: ModWarning[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export type AutomationEventType =
   | 'follow'
   | 'subscription'

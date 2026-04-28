@@ -99,6 +99,56 @@ describe('normalizeSetting — bot_prefix', () => {
   });
 });
 
+describe('normalizeSetting — moderation tier keys', () => {
+  const key = 'mod_links_start_tier';
+
+  it('accepts integers 1..4', () => {
+    expect(normalizeSetting(key, 1)).toBe('1');
+    expect(normalizeSetting(key, '3')).toBe('3');
+    expect(normalizeSetting(key, 4)).toBe('4');
+  });
+
+  it('rejects out-of-range and non-integer values', () => {
+    expect(() => normalizeSetting(key, 0)).toThrow();
+    expect(() => normalizeSetting(key, 5)).toThrow();
+    expect(() => normalizeSetting(key, 2.5)).toThrow();
+    expect(() => normalizeSetting(key, 'high')).toThrow();
+  });
+});
+
+describe('normalizeSetting — blocked words', () => {
+  const key = 'mod_blocked_words';
+
+  it('accepts a string array and round-trips through JSON', () => {
+    expect(normalizeSetting(key, ['Spam', 'badword'])).toBe(
+      JSON.stringify(['spam', 'badword']),
+    );
+  });
+
+  it('lowercases, trims, and dedupes', () => {
+    expect(normalizeSetting(key, ['  Hello  ', 'hello', 'WORLD'])).toBe(
+      JSON.stringify(['hello', 'world']),
+    );
+  });
+
+  it('parses an incoming JSON string', () => {
+    expect(normalizeSetting(key, '["foo","bar"]')).toBe(
+      JSON.stringify(['foo', 'bar']),
+    );
+  });
+
+  it('returns "[]" for empty input', () => {
+    expect(normalizeSetting(key, [])).toBe('[]');
+    expect(normalizeSetting(key, '')).toBe('[]');
+  });
+
+  it('rejects non-array shapes', () => {
+    expect(() => normalizeSetting(key, 'not json')).toThrow();
+    expect(() => normalizeSetting(key, { foo: 'bar' })).toThrow();
+    expect(() => normalizeSetting(key, 42)).toThrow();
+  });
+});
+
 describe('normalizeSetting — generic string keys', () => {
   it('passes strings through unchanged', () => {
     expect(normalizeSetting('levelup_announcement', '{user} hit {level}!')).toBe(
