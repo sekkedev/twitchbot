@@ -16,6 +16,7 @@ import { registerSessionHandlers } from './ipc/sessions';
 import { registerSettingsHandlers } from './ipc/settings';
 import { registerTimerHandlers } from './ipc/timers';
 import { registerUserHandlers } from './ipc/users';
+import { registerWebhookHandlers } from './ipc/webhooks';
 import { registerWindowHandlers } from './ipc/window';
 import { closeDatabase, initDatabase } from './services/database';
 import { startAutomationEngine, stopAutomationEngine } from './services/automation-engine';
@@ -127,6 +128,7 @@ app.whenReady().then(async () => {
   registerUserHandlers();
   registerAnalyticsHandlers();
   registerSettingsHandlers();
+  registerWebhookHandlers();
   registerWindowHandlers();
   registerDbHandlers();
   registerDiagnosticsHandlers();

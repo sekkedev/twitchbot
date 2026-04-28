@@ -155,3 +155,13 @@ export function EyeOffIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function WebhookIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="M18 16.98h-5.99c-1.66 0-3.01-1.34-3.01-3s1.34-3 3-3v0" />
+      <path d="M7.5 8.5a4.5 4.5 0 1 1 8.18 2.62" />
+      <path d="M9 14a4.5 4.5 0 1 0 6.5 4" />
+    </svg>
+  );
+}
