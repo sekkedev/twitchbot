@@ -285,8 +285,15 @@ function WebhookManager({
 }
 
 function maskUrl(url: string): string {
-  if (url.length <= 60) return url;
-  return `${url.slice(0, 40)}…${url.slice(-12)}`;
+  if (!url) return '';
+  // Discord webhook URLs embed an auth token. Show only the host + a short
+  // tail so the secret never lands on screen (or in screenshots).
+  try {
+    const parsed = new URL(url);
+    return `${parsed.host}/…/${url.slice(-4)}`;
+  } catch {
+    return url.length > 24 ? `${url.slice(0, 20)}…` : url;
+  }
 }
 
 // ── Section 2 + 3: Embed template editor + live preview ─────────────────────

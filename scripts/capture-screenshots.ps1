@@ -78,19 +78,18 @@ Start-Sleep -Milliseconds 600
 
 New-Item -Path $OutDir -ItemType Directory -Force | Out-Null
 
-# Sidebar order: Dashboard, Commands, Timers, Loyalty, Moderation,
-# Automations, Analytics, Settings. Alt+9 deep-links to the Moderation
-# Logs tab (NavHotkeys + ?tab=logs in Moderation.tsx).
+# Sidebar order (Alt+1..9): Dashboard, Commands, Timers, Loyalty,
+# Moderation, Automations, Webhooks, Analytics, Settings.
 $pages = @(
-    @{ key = '1'; name = '01-dashboard';        delayMs = 900 },
-    @{ key = '2'; name = '02-commands';         delayMs = 700 },
-    @{ key = '3'; name = '03-timers';           delayMs = 700 },
-    @{ key = '4'; name = '04-loyalty';          delayMs = 1000 },
-    @{ key = '5'; name = '05-moderation-rules'; delayMs = 900 },
-    @{ key = '9'; name = '06-moderation-logs';  delayMs = 900 },
-    @{ key = '6'; name = '07-automations';      delayMs = 800 },
-    @{ key = '7'; name = '08-analytics';        delayMs = 1800 },
-    @{ key = '8'; name = '09-settings';         delayMs = 1000 }
+    @{ key = '1'; name = '01-dashboard';   delayMs = 900 },
+    @{ key = '2'; name = '02-commands';    delayMs = 700 },
+    @{ key = '3'; name = '07-timers';      delayMs = 700 },
+    @{ key = '4'; name = '04-loyalty';     delayMs = 1000 },
+    @{ key = '5'; name = '06-moderation';  delayMs = 900 },
+    @{ key = '6'; name = '08-automations'; delayMs = 800 },
+    @{ key = '7'; name = '09-webhooks';    delayMs = 800 },
+    @{ key = '8'; name = '10-analytics';   delayMs = 1800 },
+    @{ key = '9'; name = '11-settings';    delayMs = 1000 }
 )
 
 foreach ($page in $pages) {
