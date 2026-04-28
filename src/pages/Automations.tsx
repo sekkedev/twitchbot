@@ -537,7 +537,7 @@ function renderActionFields(
             onChange={(webhook_key) => onChange({ ...action, webhook_key })}
           />
           <TextInput
-            value={action.message}
+            value={action.message ?? ''}
             placeholder="{user} triggered an event"
             onChange={(message) => onChange({ ...action, message })}
           />
