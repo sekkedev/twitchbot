@@ -92,10 +92,37 @@ export interface AutomationCondition {
   value: string | number;
 }
 
+export interface DiscordEmbedField {
+  name: string;
+  value: string;
+  inline?: boolean;
+}
+
+export interface DiscordEmbed {
+  title?: string;
+  description?: string;
+  color?: number;
+  author?: { name: string; icon_url?: string };
+  thumbnail?: { url: string };
+  fields?: DiscordEmbedField[];
+  footer?: { text: string };
+  timestamp?: boolean;
+}
+
+export interface EmbedTemplate {
+  name: string;
+  embed: DiscordEmbed;
+}
+
 export type AutomationAction =
   | { type: 'send_chat_message'; message: string }
   | { type: 'play_sound'; file: string }
-  | { type: 'send_discord_webhook'; webhook_key: string; message: string }
+  | {
+      type: 'send_discord_webhook';
+      webhook_key: string;
+      message?: string;
+      embed?: DiscordEmbed;
+    }
   | { type: 'timeout_user'; duration: number; reason?: string }
   | { type: 'add_exp'; amount: number }
   | { type: 'delay'; seconds: number };

@@ -6,7 +6,7 @@ import { broadcast } from '../ipc/broadcast';
 import { interpolate } from '../lib/command-logic';
 import { awardExp } from './exp-engine';
 import { getDatabase } from './database';
-import { getSetting } from './settings-service';
+import { sendWebhook, type DiscordEmbed } from './discord-webhooks';
 import { getCurrentTokens } from './twitch-auth';
 import { sendChat } from './twitch-chat';
 import { timeoutUser } from './twitch-helix';
@@ -38,7 +38,12 @@ export interface AutomationCondition {
 export type AutomationAction =
   | { type: 'send_chat_message'; message: string }
   | { type: 'play_sound'; file: string }
-  | { type: 'send_discord_webhook'; webhook_key: string; message: string }
+  | {
+      type: 'send_discord_webhook';
+      webhook_key: string;
+      message?: string;
+      embed?: DiscordEmbed;
+    }
   | { type: 'timeout_user'; duration: number; reason?: string }
   | { type: 'add_exp'; amount: number }
   | { type: 'delay'; seconds: number };
@@ -312,7 +317,11 @@ async function executeAction(
       broadcast('sound:play', soundFile(action.file));
       break;
     case 'send_discord_webhook':
-      await sendDiscordWebhook(action.webhook_key, resolveTemplate(action.message, ctx));
+      await sendWebhook(
+        action.webhook_key,
+        { content: action.message, embed: action.embed },
+        ctx.variables,
+      );
       break;
     case 'timeout_user':
       await timeoutTriggeringUser(ctx, action.duration, action.reason);
@@ -412,23 +421,6 @@ function resolveTemplate(template: string, ctx: AutomationContext): string {
   return interpolate(template, ctx.variables);
 }
 
-async function sendDiscordWebhook(key: string, message: string): Promise<void> {
-  const normalized = normalizeWebhookKey(key);
-  const url = getSetting(`discord_webhook_${normalized}`, '');
-  if (!url) {
-    console.warn(`[auto] discord webhook ${normalized} is empty`);
-    return;
-  }
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content: message }),
-  });
-  if (!res.ok) {
-    throw new Error(`Discord webhook failed: ${res.status} ${await res.text()}`);
-  }
-}
-
 async function timeoutTriggeringUser(
   ctx: AutomationContext,
   duration: number,
@@ -461,11 +453,15 @@ function previewAction(
       return { action: action.type, detail: resolveTemplate(action.message, ctx) };
     case 'play_sound':
       return { action: action.type, detail: action.file };
-    case 'send_discord_webhook':
+    case 'send_discord_webhook': {
+      const parts: string[] = [];
+      if (action.message) parts.push(resolveTemplate(action.message, ctx));
+      if (action.embed) parts.push('[embed]');
       return {
         action: action.type,
-        detail: `${action.webhook_key}: ${resolveTemplate(action.message, ctx)}`,
+        detail: `${action.webhook_key}: ${parts.join(' ') || '(empty)'}`,
       };
+    }
     case 'timeout_user':
       return { action: action.type, detail: `${action.duration}s` };
     case 'add_exp':
@@ -573,10 +569,6 @@ function soundFile(name: string): SoundFile {
     name: safeName,
     url: pathToFileURL(path.join(soundsDir(), safeName)).toString(),
   };
-}
-
-function normalizeWebhookKey(key: string): string {
-  return key.trim().toLowerCase().replace(/^discord_webhook_/, '').replace(/[^a-z0-9_-]/g, '_');
 }
 
 function sleep(ms: number): Promise<void> {

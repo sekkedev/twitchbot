@@ -13,7 +13,12 @@ import {
   type AutomationInput,
   type AutomationUpdate,
 } from '../services/automation-engine';
-import { deleteSetting, getAllSettings, updateSetting } from '../services/settings-service';
+import {
+  deleteWebhook,
+  getWebhookUrl,
+  listWebhooks,
+  saveWebhook,
+} from '../services/discord-webhooks';
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string };
 
@@ -75,7 +80,7 @@ export function registerAutomationHandlers(): void {
 
   ipcMain.handle('discord-webhooks:list', () => {
     try {
-      return ok(listDiscordWebhooks());
+      return ok(listWebhooks());
     } catch (err) {
       return fail(err);
     }
@@ -85,9 +90,8 @@ export function registerAutomationHandlers(): void {
     'discord-webhooks:save',
     (_event, payload: { key: string; url: string }) => {
       try {
-        const key = normalizeWebhookKey(payload.key);
-        updateSetting(`discord_webhook_${key}`, payload.url);
-        return ok(listDiscordWebhooks());
+        saveWebhook(payload.key, payload.url);
+        return ok(listWebhooks());
       } catch (err) {
         return fail(err);
       }
@@ -96,8 +100,8 @@ export function registerAutomationHandlers(): void {
 
   ipcMain.handle('discord-webhooks:delete', (_event, key: string) => {
     try {
-      deleteSetting(`discord_webhook_${normalizeWebhookKey(key)}`);
-      return ok(listDiscordWebhooks());
+      deleteWebhook(key);
+      return ok(listWebhooks());
     } catch (err) {
       return fail(err);
     }
@@ -107,9 +111,7 @@ export function registerAutomationHandlers(): void {
     'discord-webhooks:test',
     async (_event, payload: { key: string; url?: string }) => {
       try {
-        const url =
-          payload.url ??
-          getAllSettings()[`discord_webhook_${normalizeWebhookKey(payload.key)}`];
+        const url = payload.url ?? getWebhookUrl(payload.key);
         if (!url) throw new Error('Webhook URL is empty.');
         const res = await fetch(url, {
           method: 'POST',
@@ -156,22 +158,3 @@ export function registerAutomationHandlers(): void {
   });
 }
 
-function listDiscordWebhooks(): Array<{ key: string; url: string }> {
-  return Object.entries(getAllSettings())
-    .filter(([key]) => key.startsWith('discord_webhook_'))
-    .map(([key, url]) => ({
-      key: key.replace(/^discord_webhook_/, ''),
-      url,
-    }))
-    .sort((a, b) => a.key.localeCompare(b.key));
-}
-
-function normalizeWebhookKey(key: string): string {
-  const normalized = key
-    .trim()
-    .toLowerCase()
-    .replace(/^discord_webhook_/, '')
-    .replace(/[^a-z0-9_-]/g, '_');
-  if (!normalized) throw new Error('Webhook name is required.');
-  return normalized;
-}

@@ -8,6 +8,7 @@ import {
   ShieldIcon,
   TerminalIcon,
   TrophyIcon,
+  WebhookIcon,
   ZapIcon,
 } from './Icons';
 
@@ -18,6 +19,7 @@ const NAV = [
   { to: '/loyalty', label: 'Loyalty', icon: TrophyIcon, end: false },
   { to: '/moderation', label: 'Moderation', icon: ShieldIcon, end: false },
   { to: '/automations', label: 'Automations', icon: ZapIcon, end: false },
+  { to: '/webhooks', label: 'Webhooks', icon: WebhookIcon, end: false },
   { to: '/analytics', label: 'Analytics', icon: BarChartIcon, end: false },
   { to: '/settings', label: 'Settings', icon: GearIcon, end: false },
 ] as const;

@@ -17,6 +17,7 @@ import { Popout } from './pages/Popout';
 import { Settings as SettingsPage } from './pages/Settings';
 import { SignIn } from './pages/SignIn';
 import { Timers } from './pages/Timers';
+import { Webhooks } from './pages/Webhooks';
 import { useAppStore } from './stores/useAppStore';
 import type { SoundFile } from './lib/types';
 
@@ -27,6 +28,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/loyalty': 'Loyalty',
   '/moderation': 'Moderation',
   '/automations': 'Automations',
+  '/webhooks': 'Webhooks',
   '/analytics': 'Analytics',
   '/settings': 'Settings',
 };
@@ -91,6 +93,7 @@ function InnerRoutes() {
           <Route path="/loyalty" element={<Loyalty />} />
           <Route path="/moderation" element={<Moderation />} />
           <Route path="/automations" element={<Automations />} />
+          <Route path="/webhooks" element={<Webhooks />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
