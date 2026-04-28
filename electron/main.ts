@@ -24,6 +24,7 @@ import { loadCredentialsFromDisk } from './services/credentials';
 import { closeDanglingSession } from './services/streak-tracker';
 import { loadTokensFromDisk } from './services/twitch-auth';
 import { disconnectBot } from './services/twitch-chat';
+import { isSafeExternalUrl } from './lib/url-security';
 
 dotenv.config({ path: path.join(app.getAppPath(), '.env') });
 
@@ -31,6 +32,14 @@ const isDev = process.env.NODE_ENV === 'development';
 const DEV_URL = 'http://localhost:5173';
 
 let mainWindow: BrowserWindow | null = null;
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[process] unhandled rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[process] uncaught exception:', err);
+});
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -55,7 +64,11 @@ function createWindow(): void {
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (isSafeExternalUrl(url)) {
+      void shell.openExternal(url);
+    } else {
+      console.warn(`[window] blocked external URL: ${url}`);
+    }
     return { action: 'deny' };
   });
 

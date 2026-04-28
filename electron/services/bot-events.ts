@@ -57,7 +57,13 @@ export function emitBotEvent<K extends BotEventName>(
   event: K,
   payload: BotEventMap[K],
 ): void {
-  emitter.emit(event, payload);
+  for (const listener of emitter.listeners(event)) {
+    try {
+      (listener as BotEventHandler<K>)(payload);
+    } catch (err) {
+      console.error(`[bot-events] ${String(event)} listener failed:`, err);
+    }
+  }
 }
 
 export function onBotEvent<K extends BotEventName>(

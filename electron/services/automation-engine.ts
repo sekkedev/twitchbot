@@ -290,6 +290,9 @@ async function executeAutomation(
   automation: AutomationRow,
   ctx: AutomationContext,
 ): Promise<void> {
+  const triggeredAt = reserveAutomationCooldown(automation);
+  if (triggeredAt === null) return;
+
   for (const action of automation.actions) {
     try {
       await executeAction(action, ctx);
@@ -297,12 +300,26 @@ async function executeAutomation(
       console.error(`[auto] action ${action.type} failed:`, err);
     }
   }
+  automation.last_triggered_at = triggeredAt;
+  broadcast('automations:triggered', { id: automation.id, timestamp: triggeredAt });
+}
+
+function reserveAutomationCooldown(automation: AutomationRow): number | null {
   const now = Math.floor(Date.now() / 1000);
-  getDatabase()
-    .prepare('UPDATE automations SET last_triggered_at = ?, updated_at = unixepoch() WHERE id = ?')
-    .run(now, automation.id);
-  automation.last_triggered_at = now;
-  broadcast('automations:triggered', { id: automation.id, timestamp: now });
+  const info = getDatabase()
+    .prepare(
+      `UPDATE automations
+       SET last_triggered_at = ?, updated_at = unixepoch()
+       WHERE id = ?
+         AND (
+           cooldown_seconds <= 0
+           OR last_triggered_at IS NULL
+           OR ? - last_triggered_at >= cooldown_seconds
+         )`,
+    )
+    .run(now, automation.id, now);
+  if (info.changes === 0) return null;
+  return now;
 }
 
 async function executeAction(
