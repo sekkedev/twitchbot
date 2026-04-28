@@ -16,23 +16,84 @@ interface WebhookEntry {
 
 const PREVIEW_VARS: Record<string, string | number> = {
   user: 'PreviewUser',
-  event: 'follow',
-  level: 12,
+  event: 'raid',
+  raider: 'PreviewUser',
+  raid_size: 42,
   raid_viewers: 42,
-  bits: 500,
+  from_channel: 'previewuser',
   tier: '1000',
+  tier_label: 'Tier 1',
+  months: 6,
+  is_gift: 'no',
+  is_anonymous: 'no',
   total: 5,
+  sub_message: 'thanks for the stream!',
+  bits: 500,
+  cheer_message: 'cheer500 amazing!',
+  timestamp: new Date().toLocaleString(),
 };
 
 const DEFAULT_EMBED: DiscordEmbed = {
-  title: '{user} just followed!',
-  description: 'Welcome to the stream — current level **{level}**.',
+  title: '{raider} is raiding with {raid_size}!',
+  description: 'Incoming from **{raider}** — bringing **{raid_size}** viewers.',
   color: 0x9146ff,
-  author: { name: '{user}' },
-  fields: [],
+  author: { name: '{raider}' },
+  fields: [
+    { name: 'Raid size', value: '{raid_size}', inline: true },
+    { name: 'From', value: '{from_channel}', inline: true },
+  ],
   footer: { text: 'TwitchBot' },
   timestamp: true,
 };
+
+interface VarGroup {
+  label: string;
+  events: string;
+  vars: Array<[string, string]>;
+}
+
+const VARIABLE_GROUPS: VarGroup[] = [
+  {
+    label: 'Always',
+    events: 'every event',
+    vars: [
+      ['user', 'Display name of the triggering user (or raider for raids)'],
+      ['event', 'Event type (e.g. follow, raid, cheer)'],
+      ['timestamp', 'ISO timestamp of the event'],
+    ],
+  },
+  {
+    label: 'Raid',
+    events: 'raid',
+    vars: [
+      ['raider', 'Display name of the channel raiding in'],
+      ['raid_size', 'Number of incoming viewers'],
+      ['raid_viewers', 'Alias of raid_size (legacy)'],
+      ['from_channel', 'Login name of the raiding channel'],
+    ],
+  },
+  {
+    label: 'Subscription',
+    events: 'subscription, sub_gift',
+    vars: [
+      ['tier', 'Raw tier code (1000, 2000, 3000, prime)'],
+      ['tier_label', 'Friendly label (Tier 1, Prime, …)'],
+      ['months', 'Cumulative months subscribed'],
+      ['is_gift', '"yes" if this sub was gifted'],
+      ['is_anonymous', '"yes" for anonymous gift subs'],
+      ['total', 'Total subs in a sub_gift bomb'],
+      ['sub_message', 'Resub message text (if any)'],
+    ],
+  },
+  {
+    label: 'Cheer',
+    events: 'cheer',
+    vars: [
+      ['bits', 'Bit count'],
+      ['cheer_message', 'Cheer message text'],
+    ],
+  },
+];
 
 export function Webhooks() {
   const confirm = useConfirm();
@@ -438,9 +499,7 @@ function EmbedTemplateSection({
         </header>
         <div className="p-4">
           <DiscordPreview embed={embed} vars={PREVIEW_VARS} />
-          <div className="mt-3 text-[10px] text-text-dim">
-            Variables: {'{user} {event} {level} {raid_viewers} {bits} {tier} {total}'}
-          </div>
+          <VariableReference />
         </div>
       </section>
     </div>
@@ -746,6 +805,34 @@ function DiscordPreview({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── variable reference card ──
+
+function VariableReference() {
+  return (
+    <div className="mt-4 space-y-3 border-t border-border pt-3">
+      <div className="font-mono text-[10px] uppercase tracking-wider text-text-dim">
+        Available variables
+      </div>
+      {VARIABLE_GROUPS.map((group) => (
+        <div key={group.label}>
+          <div className="mb-1 flex items-baseline justify-between">
+            <span className="text-[11px] font-semibold text-text">{group.label}</span>
+            <span className="font-mono text-[10px] text-text-dim">{group.events}</span>
+          </div>
+          <div className="space-y-0.5">
+            {group.vars.map(([name, desc]) => (
+              <div key={name} className="grid grid-cols-[120px_1fr] gap-2">
+                <code className="font-mono text-[11px] text-accent">{`{${name}}`}</code>
+                <span className="text-[11px] text-text-muted">{desc}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

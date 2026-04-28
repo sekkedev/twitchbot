@@ -151,12 +151,21 @@ export function buildPayload(
 
 const MOCK_VARS: TemplateVars = {
   user: 'TestUser',
-  event: 'test',
-  level: 5,
+  event: 'raid',
+  raider: 'TestUser',
+  raid_size: 42,
   raid_viewers: 42,
-  bits: 500,
+  from_channel: 'testuser',
   tier: '1000',
+  tier_label: 'Tier 1',
+  months: 6,
+  is_gift: 'no',
+  is_anonymous: 'no',
   total: 5,
+  sub_message: 'thanks for the stream!',
+  bits: 500,
+  cheer_message: 'cheer500 amazing!',
+  timestamp: new Date().toISOString(),
 };
 
 async function postToUrl(

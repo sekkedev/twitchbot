@@ -372,15 +372,51 @@ function buildContext(
 ): AutomationContext {
   const data = normalizeEventData(eventType, event);
   const user = getUserFromEvent(eventType, event);
+  const tier = String(data.tier ?? '');
+  const raidSize = Number(data.viewer_count ?? data.viewers ?? 0);
   const variables: Record<string, string | number> = {
     user: String(user?.displayName ?? data.fromDisplayName ?? data.fromChannel ?? 'stream'),
     event: eventType,
-    raid_viewers: Number(data.viewer_count ?? 0),
-    bits: Number(data.bits ?? 0),
-    tier: String(data.tier ?? ''),
+
+    // Raid
+    raider: String(data.fromDisplayName ?? data.fromChannel ?? ''),
+    raid_size: raidSize,
+    raid_viewers: raidSize, // legacy alias — keep before renaming in templates
+    from_channel: String(data.fromChannel ?? ''),
+
+    // Subscription / gift
+    tier,
+    tier_label: formatTierLabel(tier),
+    months: Number(data.months ?? 0),
+    is_gift: data.isGift ? 'yes' : 'no',
+    is_anonymous: data.isAnonymous ? 'yes' : 'no',
     total: Number(data.total ?? 0),
+    sub_message: String(data.message ?? ''),
+
+    // Cheer
+    bits: Number(data.bits ?? 0),
+    cheer_message: String(data.message ?? ''),
+
+    // Generic
+    timestamp: String(data.timestamp ?? new Date().toISOString()),
   };
   return { eventType, event: data, user, variables };
+}
+
+function formatTierLabel(tier: string): string {
+  switch (tier) {
+    case '1000':
+      return 'Tier 1';
+    case '2000':
+      return 'Tier 2';
+    case '3000':
+      return 'Tier 3';
+    case 'prime':
+    case 'Prime':
+      return 'Prime';
+    default:
+      return tier;
+  }
 }
 
 function normalizeEventData(
