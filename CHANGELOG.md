@@ -5,6 +5,25 @@ All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Moderation Suite v2 ([#21](https://github.com/9ny4/twitchbot/pull/21))
+- Added blocked words rule (case-insensitive substring match against a JSON word list).
+- Added first-message screening that auto-deletes the first chat from any user with `messages_sent = 0` (subscribers exempt).
+- Added per-rule escalation override: `mod_<rule>_start_tier` (1–4) shifts the offence ladder so the first violation can land on any tier.
+- Added moderation analytics — `mod:getStats` returns counts by timeframe (today / 7d / 30d), per-rule breakdown, top warned users (30d), and action distribution.
+- Added paginated moderation log — `mod:getWarningsPage` with `{ page, pageSize, ruleFilter, sortOrder }` and a 25/page default.
+- Added Discord webhook alerts for every mod action, dispatched via the seeded `moderation` embed template (editable in the Webhooks page).
+- Rewrote `Moderation.tsx`: stats strip, blocked-words tag input, per-rule start-tier dropdowns, first-message toggle card, Discord alerts section, paginated warnings table with rule filter and Prev/Next.
+
+### Discord Embed Builder ([#19](https://github.com/9ny4/twitchbot/pull/19))
+- Added Webhooks page with three sections: webhook URL manager, visual embed template editor, and a live Discord-style preview that renders as you type.
+- Extended the `send_discord_webhook` automation action with an optional `embed` (title, description, color, author, thumbnail, fields, footer, timestamp). Plain-text webhooks unchanged.
+- Added embed-template storage and IPC: `webhooks:getTemplates`, `webhooks:saveTemplate`, `webhooks:deleteTemplate`, `webhooks:testEmbed`.
+- Extracted `electron/services/discord-webhooks.ts` consolidating webhook URL CRUD, template CRUD, and the payload builder that resolves template variables across every embed field.
+- Enriched automation context variables from 6 to 16: raid (`raider`, `raid_size`, `from_channel`), subscription (`tier_label`, `months`, `is_gift`, `is_anonymous`, `sub_message`), cheer (`cheer_message`), and a global `timestamp`.
+- New sidebar entry + `/webhooks` route + Alt+7 hotkey.
+
 ## [1.0.0] — 2026-04-23
 
 Initial release.
