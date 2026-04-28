@@ -4,6 +4,7 @@
  */
 
 import { interpolate } from '../lib/command-logic';
+import { validateDiscordWebhookUrl } from '../lib/url-security';
 import { deleteSetting, getAllSettings, getSetting, updateSetting } from './settings-service';
 
 export interface DiscordEmbedField {
@@ -37,6 +38,7 @@ export type TemplateVars = Record<string, string | number>;
 
 const WEBHOOK_PREFIX = 'discord_webhook_';
 const TEMPLATE_PREFIX = 'discord_embed_template_';
+const WEBHOOK_TIMEOUT_MS = 10_000;
 
 export function normalizeWebhookKey(key: string): string {
   const normalized = key
@@ -72,7 +74,7 @@ export function listWebhooks(): Array<{ key: string; url: string }> {
 
 export function saveWebhook(key: string, url: string): void {
   const normalized = normalizeWebhookKey(key);
-  updateSetting(`${WEBHOOK_PREFIX}${normalized}`, url);
+  updateSetting(`${WEBHOOK_PREFIX}${normalized}`, validateDiscordWebhookUrl(url));
 }
 
 export function deleteWebhook(key: string): void {
@@ -141,6 +143,10 @@ export async function testEmbed(
   await postToUrl(url, { embed }, vars);
 }
 
+export async function testWebhookUrl(url: string): Promise<void> {
+  await postToUrl(url, { content: 'TwitchBot webhook test' }, {});
+}
+
 export function buildPayload(
   options: SendOptions,
   vars: TemplateVars,
@@ -180,17 +186,25 @@ async function postToUrl(
   options: SendOptions,
   vars: TemplateVars,
 ): Promise<void> {
+  const safeUrl = validateDiscordWebhookUrl(url);
   const payload = buildPayload(options, vars);
   if (!payload.content && !payload.embeds) {
     throw new Error('Webhook payload is empty.');
   }
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    throw new Error(`Discord webhook failed: ${res.status} ${await res.text()}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+  try {
+    const res = await fetch(safeUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Discord webhook failed: ${res.status} ${await res.text()}`);
+    }
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

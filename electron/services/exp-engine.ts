@@ -124,11 +124,13 @@ export function awardExp(
   const newTotal = user.exp + amount;
   const newLevel = computeLevel(newTotal, settings.levelBase, settings.levelExponent);
 
-  getDatabase()
-    .prepare('UPDATE users SET exp = ?, level = ? WHERE twitch_id = ?')
-    .run(newTotal, newLevel, twitchId);
-
-  logEvent(source, twitchId, amount, options.data);
+  const db = getDatabase();
+  const writeAward = db.transaction(() => {
+    db.prepare('UPDATE users SET exp = ?, level = ? WHERE twitch_id = ?')
+      .run(newTotal, newLevel, twitchId);
+    logEvent(source, twitchId, amount, options.data);
+  });
+  writeAward();
 
   if (!options.suppressFeed) {
     broadcast('users:exp-gained', {

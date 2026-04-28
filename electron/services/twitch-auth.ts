@@ -205,11 +205,32 @@ function renderCallbackPage(success: boolean, message?: string): string {
   const body = success
     ? 'You can close this tab and return to TwitchBot.'
     : `Something went wrong: ${message ?? 'unknown error'}. You can close this tab.`;
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
+  const safeTitle = escapeHtml(title);
+  const safeBody = escapeHtml(body);
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${safeTitle}</title>
 <style>html,body{height:100%;margin:0;background:#0e0e10;color:#efeff1;font-family:system-ui,sans-serif}
 .wrap{height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px}
 h1{font-size:20px;margin:0}p{color:#adadb8;margin:0}</style></head>
-<body><div class="wrap"><h1>${title}</h1><p>${body}</p></div></body></html>`;
+<body><div class="wrap"><h1>${safeTitle}</h1><p>${safeBody}</p></div></body></html>`;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case '&':
+        return '&amp;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      case '"':
+        return '&quot;';
+      case "'":
+        return '&#39;';
+      default:
+        return char;
+    }
+  });
 }
 
 async function exchangeCodeForTokens(params: {

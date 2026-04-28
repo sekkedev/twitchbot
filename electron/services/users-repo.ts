@@ -167,22 +167,25 @@ export function adjustUserExp(
   const newTotal = Math.max(0, existing.exp + delta);
   const newLevel = computeLevel(newTotal, base, exponent);
 
-  db.prepare('UPDATE users SET exp = ?, level = ? WHERE twitch_id = ?').run(
-    newTotal,
-    newLevel,
-    twitchId,
-  );
+  const writeAdjustment = db.transaction(() => {
+    db.prepare('UPDATE users SET exp = ?, level = ? WHERE twitch_id = ?').run(
+      newTotal,
+      newLevel,
+      twitchId,
+    );
 
-  db.prepare(
-    `INSERT INTO events (type, twitch_user_id, data, exp_awarded, created_at)
-     VALUES (?, ?, ?, ?, ?)`,
-  ).run(
-    'admin',
-    twitchId,
-    JSON.stringify({ reason: reason ?? null, delta }),
-    delta,
-    new Date().toISOString(),
-  );
+    db.prepare(
+      `INSERT INTO events (type, twitch_user_id, data, exp_awarded, created_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).run(
+      'admin',
+      twitchId,
+      JSON.stringify({ reason: reason ?? null, delta }),
+      delta,
+      new Date().toISOString(),
+    );
+  });
+  writeAdjustment();
 
   broadcast('users:exp-gained', {
     user: {
