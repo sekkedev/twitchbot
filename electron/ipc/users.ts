@@ -6,6 +6,7 @@ import {
   resetUser,
   type ListUsersOptions,
 } from '../services/users-repo';
+import { listUsersOptionsSchema, userExpPayloadSchema, userResetPayloadSchema, twitchIdSchema } from './validation';
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string };
 
@@ -18,7 +19,7 @@ const fail = (err: unknown): IpcResult<never> => ({
 export function registerUserHandlers(): void {
   ipcMain.handle('users:list', (_e, opts?: ListUsersOptions) => {
     try {
-      return ok(listUsers(opts ?? {}));
+      return ok(listUsers(listUsersOptionsSchema.parse(opts ?? {})));
     } catch (err) {
       return fail(err);
     }
@@ -26,8 +27,9 @@ export function registerUserHandlers(): void {
 
   ipcMain.handle('users:get', (_e, twitchId: string) => {
     try {
-      const profile = getUserProfile(twitchId);
-      if (!profile) throw new Error(`User ${twitchId} not found.`);
+      const id = twitchIdSchema.parse(twitchId);
+      const profile = getUserProfile(id);
+      if (!profile) throw new Error(`User ${id} not found.`);
       return ok(profile);
     } catch (err) {
       return fail(err);
@@ -38,7 +40,8 @@ export function registerUserHandlers(): void {
     'users:update-exp',
     (_e, payload: { twitchId: string; delta: number; reason?: string }) => {
       try {
-        const result = adjustUserExp(payload.twitchId, payload.delta, payload.reason);
+        const parsed = userExpPayloadSchema.parse(payload);
+        const result = adjustUserExp(parsed.twitchId, parsed.delta, parsed.reason);
         return ok(result);
       } catch (err) {
         return fail(err);
@@ -48,7 +51,8 @@ export function registerUserHandlers(): void {
 
   ipcMain.handle('users:reset', (_e, payload?: { twitchId?: string }) => {
     try {
-      return ok(resetUser(payload?.twitchId ?? null));
+      const parsed = userResetPayloadSchema.parse(payload ?? {});
+      return ok(resetUser(parsed.twitchId ?? null));
     } catch (err) {
       return fail(err);
     }

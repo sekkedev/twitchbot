@@ -20,6 +20,7 @@ import {
   saveWebhook,
   testWebhookUrl,
 } from '../services/discord-webhooks';
+import { automationInputSchema, automationUpdateSchema, numberIdSchema } from './validation';
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string };
 
@@ -40,7 +41,7 @@ export function registerAutomationHandlers(): void {
 
   ipcMain.handle('automations:create', (_event, input: AutomationInput) => {
     try {
-      return ok(createAutomation(input));
+      return ok(createAutomation(automationInputSchema.parse(input) as AutomationInput));
     } catch (err) {
       return fail(err);
     }
@@ -48,7 +49,7 @@ export function registerAutomationHandlers(): void {
 
   ipcMain.handle('automations:update', (_event, update: AutomationUpdate) => {
     try {
-      return ok(updateAutomation(update));
+      return ok(updateAutomation(automationUpdateSchema.parse(update) as AutomationUpdate));
     } catch (err) {
       return fail(err);
     }
@@ -56,7 +57,7 @@ export function registerAutomationHandlers(): void {
 
   ipcMain.handle('automations:delete', (_event, id: number) => {
     try {
-      deleteAutomation(id);
+      deleteAutomation(numberIdSchema.parse(id));
       return ok(null);
     } catch (err) {
       return fail(err);
@@ -65,7 +66,7 @@ export function registerAutomationHandlers(): void {
 
   ipcMain.handle('automations:toggle', (_event, id: number) => {
     try {
-      return ok(toggleAutomation(id));
+      return ok(toggleAutomation(numberIdSchema.parse(id)));
     } catch (err) {
       return fail(err);
     }
@@ -73,7 +74,7 @@ export function registerAutomationHandlers(): void {
 
   ipcMain.handle('automations:test', (_event, input: AutomationInput) => {
     try {
-      return ok(testAutomation(input));
+      return ok(testAutomation(automationInputSchema.parse(input) as AutomationInput));
     } catch (err) {
       return fail(err);
     }
@@ -151,4 +152,3 @@ export function registerAutomationHandlers(): void {
     }
   });
 }
-
