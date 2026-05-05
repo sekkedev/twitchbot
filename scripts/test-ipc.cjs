@@ -3,8 +3,19 @@
 // Runs under electron runtime (required for better-sqlite3's ABI) against a
 // disposable userData directory so your real DB is untouched.
 
+const { spawnSync } = require('node:child_process');
+
+if (!process.versions.electron) {
+  const electronBinary = require('electron');
+  const res = spawnSync(electronBinary, [__filename, ...process.argv.slice(2)], {
+    stdio: 'inherit',
+    env: process.env,
+  });
+  if (res.error) throw res.error;
+  process.exit(res.status ?? 1);
+}
+
 if (!process.env.DISPLAY && process.platform !== 'win32') {
-  const { spawnSync } = require('node:child_process');
   const res = spawnSync('xvfb-run', ['-a', process.execPath, __filename], {
     stdio: 'inherit',
     env: process.env,

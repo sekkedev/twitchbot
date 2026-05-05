@@ -17,7 +17,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.electron.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:ipc": "node scripts/test-ipc.cjs",
+    "test:ipc": "electron scripts/test-ipc.cjs",
     "lint": "eslint .",
     "postinstall": "electron-rebuild -f -w better-sqlite3"
   },
