@@ -66,26 +66,19 @@ export interface ListUsersResult {
 export function upsertUser(twitchId: string, username: string): UserRow {
   const db = getDatabase();
   const now = new Date().toISOString();
-  const existing = db
-    .prepare('SELECT * FROM users WHERE twitch_id = ?')
-    .get(twitchId) as UserRow | undefined;
-
-  if (!existing) {
-    db.prepare(
-      `INSERT INTO users (twitch_id, username, first_seen, last_seen)
-       VALUES (?, ?, ?, ?)`,
-    ).run(twitchId, username, now, now);
-    return db
-      .prepare('SELECT * FROM users WHERE twitch_id = ?')
-      .get(twitchId) as UserRow;
-  }
-
-  db.prepare('UPDATE users SET username = ?, last_seen = ? WHERE twitch_id = ?').run(
-    username,
-    now,
-    twitchId,
+  const upsert = db.prepare(
+    `INSERT INTO users (twitch_id, username, first_seen, last_seen)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(twitch_id) DO UPDATE SET
+       username = excluded.username,
+       last_seen = excluded.last_seen`,
   );
-  return { ...existing, username, last_seen: now };
+
+  db.transaction(() => {
+    upsert.run(twitchId, username, now, now);
+  })();
+
+  return db.prepare('SELECT * FROM users WHERE twitch_id = ?').get(twitchId) as UserRow;
 }
 
 export function listUsers(opts: ListUsersOptions = {}): ListUsersResult {
