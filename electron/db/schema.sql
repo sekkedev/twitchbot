@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_exp       ON users(exp DESC);
 CREATE INDEX IF NOT EXISTS idx_users_username  ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_exp_username ON users(exp DESC, username ASC);
+CREATE INDEX IF NOT EXISTS idx_users_last_seen ON users(last_seen DESC);
 
 CREATE TABLE IF NOT EXISTS commands (
   id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,8 +41,9 @@ CREATE TABLE IF NOT EXISTS events (
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_user_type ON events(twitch_user_id, type);
+CREATE INDEX IF NOT EXISTS idx_events_user_created ON events(twitch_user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_events_type      ON events(type);
-CREATE INDEX IF NOT EXISTS idx_events_created   ON events(created_at);
+CREATE INDEX IF NOT EXISTS idx_events_created   ON events(created_at DESC);
 
 CREATE TABLE IF NOT EXISTS sessions (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -98,6 +101,8 @@ CREATE INDEX IF NOT EXISTS idx_mod_warnings_user
   ON mod_warnings(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_mod_warnings_rule
   ON mod_warnings(rule, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_mod_warnings_created
+  ON mod_warnings(created_at DESC);
 
 CREATE TABLE IF NOT EXISTS mod_permitted_users (
   user_id     TEXT PRIMARY KEY,
