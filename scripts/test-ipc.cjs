@@ -3,6 +3,15 @@
 // Runs under electron runtime (required for better-sqlite3's ABI) against a
 // disposable userData directory so your real DB is untouched.
 
+if (!process.env.DISPLAY && process.platform !== 'win32') {
+  const { spawnSync } = require('node:child_process');
+  const res = spawnSync('xvfb-run', ['-a', process.execPath, __filename], {
+    stdio: 'inherit',
+    env: process.env,
+  });
+  process.exit(res.status ?? 1);
+}
+
 const { app } = require('electron');
 const path = require('path');
 const os = require('os');
