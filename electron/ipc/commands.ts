@@ -7,6 +7,7 @@ import {
   type CommandInput,
   type CommandUpdate,
 } from '../services/command-engine';
+import { commandInputSchema, commandUpdateSchema, numberIdSchema } from './validation';
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string };
 
@@ -27,7 +28,7 @@ export function registerCommandHandlers(): void {
 
   ipcMain.handle('commands:create', (_event, input: CommandInput) => {
     try {
-      return ok(createCommand(input));
+      return ok(createCommand(commandInputSchema.parse(input) as CommandInput));
     } catch (err) {
       return fail(err);
     }
@@ -35,7 +36,7 @@ export function registerCommandHandlers(): void {
 
   ipcMain.handle('commands:update', (_event, update: CommandUpdate) => {
     try {
-      return ok(updateCommand(update));
+      return ok(updateCommand(commandUpdateSchema.parse(update) as CommandUpdate));
     } catch (err) {
       return fail(err);
     }
@@ -43,7 +44,7 @@ export function registerCommandHandlers(): void {
 
   ipcMain.handle('commands:delete', (_event, id: number) => {
     try {
-      deleteCommand(id);
+      deleteCommand(numberIdSchema.parse(id));
       return ok(null);
     } catch (err) {
       return fail(err);
