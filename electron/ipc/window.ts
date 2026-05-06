@@ -1,6 +1,7 @@
 import { BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import { isSafeExternalUrl } from '../lib/url-security';
+import { popoutRequestSchema } from './validation';
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string };
 
@@ -35,7 +36,8 @@ function buildPopoutUrl(route: string): string {
 export function registerWindowHandlers(): void {
   ipcMain.handle('window:popout', (_event, payload: PopoutRequest) => {
     try {
-      const id = payload.id ?? payload.route;
+      const parsed = popoutRequestSchema.parse(payload) as PopoutRequest;
+      const id = parsed.id ?? parsed.route;
       const existing = popouts.get(id);
       if (existing && !existing.isDestroyed()) {
         existing.focus();
@@ -43,11 +45,11 @@ export function registerWindowHandlers(): void {
       }
 
       const win = new BrowserWindow({
-        width: payload.width ?? 520,
-        height: payload.height ?? 760,
+        width: parsed.width ?? 520,
+        height: parsed.height ?? 760,
         minWidth: 360,
         minHeight: 360,
-        title: payload.title ?? 'TwitchBot',
+        title: parsed.title ?? 'TwitchBot',
         backgroundColor: '#0e0e10',
         autoHideMenuBar: true,
         show: false,
@@ -64,7 +66,7 @@ export function registerWindowHandlers(): void {
         if (!win.isDestroyed()) win.show();
       });
 
-      void win.loadURL(buildPopoutUrl(payload.route));
+      void win.loadURL(buildPopoutUrl(parsed.route));
 
       win.webContents.setWindowOpenHandler(({ url: outUrl }) => {
         if (isSafeExternalUrl(outUrl)) {
