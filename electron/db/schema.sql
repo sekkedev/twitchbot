@@ -19,6 +19,12 @@ CREATE INDEX IF NOT EXISTS idx_users_exp       ON users(exp DESC);
 CREATE INDEX IF NOT EXISTS idx_users_username  ON users(username);
 CREATE INDEX IF NOT EXISTS idx_users_exp_username ON users(exp DESC, username ASC);
 CREATE INDEX IF NOT EXISTS idx_users_last_seen ON users(last_seen DESC);
+-- Composite indexes for the remaining leaderboard sort keys exposed by
+-- listUsers' SORT_COLUMNS, mirroring idx_users_exp_username so the
+-- secondary `username ASC` tiebreaker stays index-served.
+CREATE INDEX IF NOT EXISTS idx_users_level_username      ON users(level              DESC, username ASC);
+CREATE INDEX IF NOT EXISTS idx_users_watch_time_username ON users(watch_time_minutes DESC, username ASC);
+CREATE INDEX IF NOT EXISTS idx_users_messages_username   ON users(messages_sent      DESC, username ASC);
 
 CREATE TABLE IF NOT EXISTS commands (
   id                INTEGER PRIMARY KEY AUTOINCREMENT,
