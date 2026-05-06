@@ -8,6 +8,7 @@ import {
   type TimerInput,
   type TimerUpdate,
 } from '../services/timers-service';
+import { numberIdSchema, timerInputSchema, timerUpdateSchema } from './validation';
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string };
 
@@ -28,7 +29,7 @@ export function registerTimerHandlers(): void {
 
   ipcMain.handle('timers:create', (_event, input: TimerInput) => {
     try {
-      return ok(createTimer(input));
+      return ok(createTimer(timerInputSchema.parse(input) as TimerInput));
     } catch (err) {
       return fail(err);
     }
@@ -36,7 +37,7 @@ export function registerTimerHandlers(): void {
 
   ipcMain.handle('timers:update', (_event, update: TimerUpdate) => {
     try {
-      return ok(updateTimer(update));
+      return ok(updateTimer(timerUpdateSchema.parse(update) as TimerUpdate));
     } catch (err) {
       return fail(err);
     }
@@ -44,7 +45,7 @@ export function registerTimerHandlers(): void {
 
   ipcMain.handle('timers:delete', (_event, id: number) => {
     try {
-      deleteTimer(id);
+      deleteTimer(numberIdSchema.parse(id));
       return ok(null);
     } catch (err) {
       return fail(err);
@@ -53,7 +54,7 @@ export function registerTimerHandlers(): void {
 
   ipcMain.handle('timers:toggle', (_event, id: number) => {
     try {
-      return ok(toggleTimer(id));
+      return ok(toggleTimer(numberIdSchema.parse(id)));
     } catch (err) {
       return fail(err);
     }
