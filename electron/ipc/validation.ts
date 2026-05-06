@@ -139,3 +139,38 @@ export const modClearWarningsSchema = z
     user_id: twitchIdSchema.optional(),
   })
   .optional();
+
+const discordEmbedFieldSchema = z.object({
+  name: z.string().min(1).max(256),
+  value: z.string().min(1).max(1024),
+  inline: z.boolean().optional(),
+});
+
+export const discordEmbedSchema = z.object({
+  title: z.string().max(256).optional(),
+  description: z.string().max(4096).optional(),
+  color: z.number().int().min(0).max(0xffffff).optional(),
+  author: z
+    .object({
+      name: z.string().min(1).max(256),
+      icon_url: z.string().url().max(2000).optional(),
+    })
+    .optional(),
+  thumbnail: z.object({ url: z.string().url().max(2000) }).optional(),
+  fields: z.array(discordEmbedFieldSchema).max(25).optional(),
+  footer: z.object({ text: z.string().min(1).max(2048) }).optional(),
+  timestamp: z.boolean().optional(),
+});
+
+export const webhookTemplateNameSchema = z.string().min(1).max(200);
+export const webhookKeySchema = z.string().min(1).max(100);
+
+export const webhookSaveTemplateSchema = z.object({
+  name: webhookTemplateNameSchema,
+  embed: discordEmbedSchema,
+});
+
+export const webhookTestEmbedSchema = z.object({
+  webhook_key: webhookKeySchema,
+  embed: discordEmbedSchema,
+});
