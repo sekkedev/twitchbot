@@ -315,6 +315,224 @@ async function main() {
     assert(resetAll.affected === 3, 'reset all affected 3');
     const totalExpAfter = analytics.getOverview().totalExp;
     assert(totalExpAfter === 0, 'total EXP is 0 after full reset');
+
+    // ----------------------------------------------------------------
+    // IPC handler coverage. The renderer is the only legitimate caller of
+    // `ipcMain.handle` channels, but everything in `electron/ipc/*` is
+    // payload-validated at the boundary (Zod, since #28/#32). The existing
+    // sections above call services directly and so never exercise that
+    // boundary. We replace ipcMain.handle with a capture-then-invoke shim
+    // and drive each handler in-process — fast, no renderer needed, covers
+    // both happy paths and schema rejections.
+    // ----------------------------------------------------------------
+    const { ipcMain } = require('electron');
+    const _ipcHandlers = new Map();
+    ipcMain.handle = (channel, fn) => _ipcHandlers.set(channel, fn);
+    async function invokeIpc(channel, payload) {
+      const fn = _ipcHandlers.get(channel);
+      if (!fn) throw new Error(`No handler registered for "${channel}"`);
+      return fn({}, payload);
+    }
+    function ok(label, result) {
+      assert(
+        result && result.success === true,
+        label,
+        result && !result.success ? result.error : undefined,
+      );
+    }
+    function rejected(label, result) {
+      assert(
+        result &&
+          result.success === false &&
+          typeof result.error === 'string' &&
+          result.error.length > 0,
+        label,
+        result,
+      );
+    }
+
+    console.log('\n[ipc/moderation]');
+    require('../dist-electron/ipc/moderation.js').registerModerationHandlers();
+    ok('mod:getSettings', await invokeIpc('mod:getSettings'));
+    ok('mod:getStatus', await invokeIpc('mod:getStatus'));
+    ok('mod:getStats', await invokeIpc('mod:getStats'));
+    ok(
+      'mod:updateSettings accepts known key',
+      await invokeIpc('mod:updateSettings', { mod_caps_enabled: true }),
+    );
+    rejected(
+      'mod:updateSettings rejects unknown key (service-level)',
+      await invokeIpc('mod:updateSettings', { not_a_real_key: 1 }),
+    );
+    rejected(
+      'mod:updateSettings rejects null payload (Zod)',
+      await invokeIpc('mod:updateSettings', null),
+    );
+    rejected(
+      'mod:updateSettings rejects string payload (Zod)',
+      await invokeIpc('mod:updateSettings', 'oops'),
+    );
+    ok('mod:getWarnings (no filter)', await invokeIpc('mod:getWarnings'));
+    ok(
+      'mod:getWarnings with user_id filter',
+      await invokeIpc('mod:getWarnings', { user_id: '1' }),
+    );
+    rejected(
+      'mod:getWarnings rejects limit=0',
+      await invokeIpc('mod:getWarnings', { limit: 0 }),
+    );
+    rejected(
+      'mod:getWarnings rejects negative from',
+      await invokeIpc('mod:getWarnings', { from: -1 }),
+    );
+    ok('mod:getWarningsPage default', await invokeIpc('mod:getWarningsPage'));
+    ok(
+      'mod:getWarningsPage with page+pageSize',
+      await invokeIpc('mod:getWarningsPage', { page: 1, pageSize: 25 }),
+    );
+    rejected(
+      'mod:getWarningsPage rejects invalid sortOrder',
+      await invokeIpc('mod:getWarningsPage', { sortOrder: 'sideways' }),
+    );
+    ok(
+      'mod:addPermittedUser',
+      await invokeIpc('mod:addPermittedUser', { user_id: '4242', username: 'chad' }),
+    );
+    rejected(
+      'mod:addPermittedUser rejects missing username',
+      await invokeIpc('mod:addPermittedUser', { user_id: '4242' }),
+    );
+    ok('mod:getPermittedUsers', await invokeIpc('mod:getPermittedUsers'));
+    ok('mod:removePermittedUser', await invokeIpc('mod:removePermittedUser', '4242'));
+    rejected(
+      'mod:removePermittedUser rejects empty id',
+      await invokeIpc('mod:removePermittedUser', ''),
+    );
+    ok('mod:clearWarnings (no payload)', await invokeIpc('mod:clearWarnings'));
+    ok(
+      'mod:clearWarnings with user_id',
+      await invokeIpc('mod:clearWarnings', { user_id: '1' }),
+    );
+
+    console.log('\n[ipc/timers]');
+    require('../dist-electron/ipc/timers.js').registerTimerHandlers();
+    ok('timers:list', await invokeIpc('timers:list'));
+    const createTimer = await invokeIpc('timers:create', {
+      name: 'auto-shoutout',
+      message: 'Welcome!',
+    });
+    ok('timers:create accepts valid input', createTimer);
+    const _timerId = createTimer.success ? createTimer.data.id : 0;
+    rejected(
+      'timers:create rejects empty name',
+      await invokeIpc('timers:create', { name: '', message: 'x' }),
+    );
+    rejected(
+      'timers:create rejects interval < 5s',
+      await invokeIpc('timers:create', {
+        name: 'x',
+        message: 'y',
+        interval_seconds: 1,
+      }),
+    );
+    ok(
+      'timers:update changes message',
+      await invokeIpc('timers:update', { id: _timerId, message: 'Hi!' }),
+    );
+    rejected(
+      'timers:update rejects id=0',
+      await invokeIpc('timers:update', { id: 0, message: 'x' }),
+    );
+    ok('timers:toggle by valid id', await invokeIpc('timers:toggle', _timerId));
+    rejected('timers:toggle rejects negative id', await invokeIpc('timers:toggle', -1));
+    ok('timers:delete', await invokeIpc('timers:delete', _timerId));
+    rejected(
+      'timers:delete rejects non-number',
+      await invokeIpc('timers:delete', 'abc'),
+    );
+
+    console.log('\n[ipc/webhooks]');
+    require('../dist-electron/ipc/webhooks.js').registerWebhookHandlers();
+    ok('webhooks:getTemplates', await invokeIpc('webhooks:getTemplates'));
+    const validEmbed = {
+      title: 'Test',
+      description: 'Body',
+      fields: [{ name: 'F1', value: 'V1' }],
+    };
+    ok(
+      'webhooks:saveTemplate accepts valid embed',
+      await invokeIpc('webhooks:saveTemplate', { name: 'tpl-test', embed: validEmbed }),
+    );
+    rejected(
+      'webhooks:saveTemplate rejects empty name',
+      await invokeIpc('webhooks:saveTemplate', { name: '', embed: validEmbed }),
+    );
+    rejected(
+      'webhooks:saveTemplate rejects 257-char title',
+      await invokeIpc('webhooks:saveTemplate', {
+        name: 'tpl-2',
+        embed: { title: 'x'.repeat(257) },
+      }),
+    );
+    rejected(
+      'webhooks:saveTemplate rejects > 25 fields',
+      await invokeIpc('webhooks:saveTemplate', {
+        name: 'tpl-3',
+        embed: {
+          fields: Array.from({ length: 26 }, (_, i) => ({
+            name: `n${i}`,
+            value: `v${i}`,
+          })),
+        },
+      }),
+    );
+    ok(
+      'webhooks:deleteTemplate by name',
+      await invokeIpc('webhooks:deleteTemplate', 'tpl-test'),
+    );
+    rejected(
+      'webhooks:deleteTemplate rejects empty',
+      await invokeIpc('webhooks:deleteTemplate', ''),
+    );
+    // testEmbed happy path would actually call Discord; only exercise the
+    // validation-rejection path here.
+    rejected(
+      'webhooks:testEmbed rejects empty webhook_key',
+      await invokeIpc('webhooks:testEmbed', { webhook_key: '', embed: validEmbed }),
+    );
+    rejected(
+      'webhooks:testEmbed rejects oversized title',
+      await invokeIpc('webhooks:testEmbed', {
+        webhook_key: 'k',
+        embed: { title: 'x'.repeat(257) },
+      }),
+    );
+
+    console.log('\n[ipc/window]');
+    // window:popout creates a real BrowserWindow on success — unsuitable
+    // for a headless test runner. Validation rejects bad payloads before
+    // any window is constructed, so we exercise only the rejection paths.
+    require('../dist-electron/ipc/window.js').registerWindowHandlers();
+    rejected(
+      'window:popout rejects empty route',
+      await invokeIpc('window:popout', { route: '' }),
+    );
+    rejected(
+      'window:popout rejects route > 200 chars',
+      await invokeIpc('window:popout', { route: 'x'.repeat(201) }),
+    );
+    rejected(
+      'window:popout rejects width < 360',
+      await invokeIpc('window:popout', { route: '/x', width: 100 }),
+    );
+    rejected(
+      'window:popout rejects height > 4000',
+      await invokeIpc('window:popout', { route: '/x', height: 5000 }),
+    );
+    rejected(
+      'window:popout rejects non-int width',
+      await invokeIpc('window:popout', { route: '/x', width: 360.5 }),
+    );
   } finally {
     closeDatabase();
     try {
