@@ -94,8 +94,16 @@ export function listUsers(opts: ListUsersOptions = {}): ListUsersResult {
   const where = searchLike ? 'WHERE username LIKE ?' : '';
   const secondarySort = column === 'username' ? '' : ', username ASC';
 
-  const sql = `SELECT u.*, (SELECT COUNT(*) + 1 FROM users u2 WHERE u2.exp > u.exp) AS rank
-    FROM users u
+  // Compute rank (competition rank, equivalent to the prior
+  // `COUNT(*) + 1 WHERE exp > u.exp` correlated subquery) once over the
+  // full users table via a window function, then filter / sort / paginate
+  // the listed page. Replaces O(N log N) correlated lookups with a single
+  // O(N) window pass over the `idx_users_exp` index.
+  const sql = `WITH ranked AS (
+      SELECT *, RANK() OVER (ORDER BY exp DESC) AS rank FROM users
+    )
+    SELECT *
+    FROM ranked
     ${where}
     ORDER BY ${column} ${direction}${secondarySort}
     LIMIT ? OFFSET ?`;
