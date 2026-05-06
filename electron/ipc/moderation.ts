@@ -13,6 +13,14 @@ import {
   type ModWarningFilters,
   type ModWarningsPageParams,
 } from '../services/moderation-service';
+import {
+  modClearWarningsSchema,
+  modPermittedUserSchema,
+  modUpdateSettingsSchema,
+  modWarningFiltersSchema,
+  modWarningsPageParamsSchema,
+  twitchIdSchema,
+} from './validation';
 
 type IpcResult<T> = { success: true; data: T } | { success: false; error: string };
 
@@ -33,7 +41,7 @@ export function registerModerationHandlers(): void {
 
   ipcMain.handle('mod:updateSettings', (_event, updates: Record<string, unknown>) => {
     try {
-      return ok(updateModSettings(updates));
+      return ok(updateModSettings(modUpdateSettingsSchema.parse(updates)));
     } catch (err) {
       return fail(err);
     }
@@ -41,7 +49,7 @@ export function registerModerationHandlers(): void {
 
   ipcMain.handle('mod:getWarnings', (_event, filters?: ModWarningFilters) => {
     try {
-      return ok(listWarnings(filters));
+      return ok(listWarnings(modWarningFiltersSchema.parse(filters) as ModWarningFilters | undefined));
     } catch (err) {
       return fail(err);
     }
@@ -49,7 +57,8 @@ export function registerModerationHandlers(): void {
 
   ipcMain.handle('mod:clearWarnings', (_event, payload?: { user_id?: string }) => {
     try {
-      return ok(clearWarnings(payload?.user_id));
+      const parsed = modClearWarningsSchema.parse(payload);
+      return ok(clearWarnings(parsed?.user_id));
     } catch (err) {
       return fail(err);
     }
@@ -59,7 +68,8 @@ export function registerModerationHandlers(): void {
     'mod:addPermittedUser',
     (_event, payload: { user_id: string; username: string }) => {
       try {
-        return ok(addPermittedUser(payload.user_id, payload.username));
+        const parsed = modPermittedUserSchema.parse(payload);
+        return ok(addPermittedUser(parsed.user_id, parsed.username));
       } catch (err) {
         return fail(err);
       }
@@ -68,7 +78,7 @@ export function registerModerationHandlers(): void {
 
   ipcMain.handle('mod:removePermittedUser', (_event, userId: string) => {
     try {
-      removePermittedUser(userId);
+      removePermittedUser(twitchIdSchema.parse(userId));
       return ok(null);
     } catch (err) {
       return fail(err);
@@ -103,7 +113,8 @@ export function registerModerationHandlers(): void {
     'mod:getWarningsPage',
     (_event, params?: ModWarningsPageParams) => {
       try {
-        return ok(listWarningsPage(params ?? {}));
+        const parsed = modWarningsPageParamsSchema.parse(params) as ModWarningsPageParams | undefined;
+        return ok(listWarningsPage(parsed ?? {}));
       } catch (err) {
         return fail(err);
       }

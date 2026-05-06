@@ -101,3 +101,41 @@ export const userExpPayloadSchema = z.object({
 export const userResetPayloadSchema = z.object({
   twitchId: twitchIdSchema.optional(),
 });
+
+const modSettingValueSchema = z.union([z.string().max(10000), z.number().finite(), z.boolean()]);
+
+export const modUpdateSettingsSchema = z.record(
+  z.string().min(1).max(100),
+  modSettingValueSchema,
+);
+
+export const modWarningFiltersSchema = z
+  .object({
+    user_id: z.string().min(1).max(100).optional(),
+    rule: z.string().min(1).max(50).optional(),
+    search: z.string().trim().min(1).max(200).optional(),
+    from: z.number().int().nonnegative().optional(),
+    to: z.number().int().nonnegative().optional(),
+    limit: z.number().int().min(1).max(1000).optional(),
+  })
+  .optional();
+
+export const modWarningsPageParamsSchema = z
+  .object({
+    page: z.number().int().min(1).optional(),
+    pageSize: z.number().int().min(1).max(500).optional(),
+    ruleFilter: z.string().min(1).max(50).optional(),
+    sortOrder: z.enum(['asc', 'desc']).optional(),
+  })
+  .optional();
+
+export const modPermittedUserSchema = z.object({
+  user_id: twitchIdSchema,
+  username: usernameSchema,
+});
+
+export const modClearWarningsSchema = z
+  .object({
+    user_id: twitchIdSchema.optional(),
+  })
+  .optional();
