@@ -16,4 +16,4 @@ win:
   artifactName: ${productName}-${version}-setup.${ext}
 nsis:
   oneClick: false
-  allowToChangeInstallationDir: true
+  allowToChangeInstallationDirectory: true

@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Moderation Suite v2 ([#21](https://github.com/9ny4/twitchbot/pull/21))
+## [1.1.0] — 2026-07-16
+
+First packaged release: Windows installer built and published via the Release
+workflow (fixed an invalid `nsis` property in `electron-builder.yml` that
+blocked packaging).
+
+### Moderation Suite v2 ([#21](https://github.com/sekkedev/twitchbot/pull/21))
 - Added blocked words rule (case-insensitive substring match against a JSON word list).
 - Added first-message screening that auto-deletes the first chat from any user with `messages_sent = 0` (subscribers exempt).
 - Added per-rule escalation override: `mod_<rule>_start_tier` (1–4) shifts the offence ladder so the first violation can land on any tier.
@@ -16,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added Discord webhook alerts for every mod action, dispatched via the seeded `moderation` embed template (editable in the Webhooks page).
 - Rewrote `Moderation.tsx`: stats strip, blocked-words tag input, per-rule start-tier dropdowns, first-message toggle card, Discord alerts section, paginated warnings table with rule filter and Prev/Next.
 
-### Discord Embed Builder ([#19](https://github.com/9ny4/twitchbot/pull/19))
+### Discord Embed Builder ([#19](https://github.com/sekkedev/twitchbot/pull/19))
 - Added Webhooks page with three sections: webhook URL manager, visual embed template editor, and a live Discord-style preview that renders as you type.
 - Extended the `send_discord_webhook` automation action with an optional `embed` (title, description, color, author, thumbnail, fields, footer, timestamp). Plain-text webhooks unchanged.
 - Added embed-template storage and IPC: `webhooks:getTemplates`, `webhooks:saveTemplate`, `webhooks:deleteTemplate`, `webhooks:testEmbed`.

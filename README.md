@@ -4,6 +4,14 @@
 
 Chat commands, EXP and levels, watch streaks, scheduled chat timers, automatic moderation with Helix-backed actions, an automation engine for follows/subs/raids, a live event feed, and a dashboard for the analytics nerd in you. No cloud. No accounts. No subscriptions. Just an app on your PC that talks to Twitch directly.
 
+## Download
+
+Grab the Windows installer (`TwitchBot-x.y.z-setup.exe`) from the
+[latest release](https://github.com/sekkedev/twitchbot/releases/latest) —
+Windows 10/11, no build tools required. You'll still need your own Twitch
+application credentials (see [Getting started](#getting-started), step 1).
+Prefer building from source? That's step 2.
+
 ![Dashboard](docs/screenshots/01-dashboard.png)
 
 ---
@@ -107,7 +115,7 @@ You need your own app on Twitch (takes 2 minutes) — this app doesn't ship with
 Requires Node.js 20+ on Windows 10/11.
 
 ```powershell
-git clone https://github.com/9ny4/twitchbot.git
+git clone https://github.com/sekkedev/twitchbot.git
 cd twitchbot
 npm install
 npm run dev
